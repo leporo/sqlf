@@ -35,8 +35,7 @@ func PostgreSQL() Dialect {
 type Dialect interface {
 	NewCtx() DialectCtx
 	// WriteString writes a string to SQL statement build buffer.
-	// Write
-	WriteString(ctx DialectCtx, s string, buf *bytebufferpool.ByteBuffer, argLen int) error
+	WriteString(ctx DialectCtx, s []byte, buf *bytebufferpool.ByteBuffer, argLen int) error
 }
 
 // DialectCtx is a generic interface for statement context
@@ -56,8 +55,8 @@ func (d *noDialect) NewCtx() DialectCtx {
 }
 
 // WriteString method copies source string to builder buffer.
-func (d *noDialect) WriteString(ctx DialectCtx, s string, buf *bytebufferpool.ByteBuffer, argLen int) error {
-	_, err := buf.WriteString(s)
+func (d *noDialect) WriteString(ctx DialectCtx, s []byte, buf *bytebufferpool.ByteBuffer, argLen int) error {
+	_, err := buf.Write(s)
 	return err
 }
 
@@ -79,35 +78,35 @@ func (d *postgreSQL) NewCtx() DialectCtx {
 }
 
 // WriteString method replaces ? placeholders with $1, $2...
-func (d *postgreSQL) WriteString(ctx DialectCtx, s string, buf *bytebufferpool.ByteBuffer, argLen int) error {
+func (d *postgreSQL) WriteString(ctx DialectCtx, s []byte, buf *bytebufferpool.ByteBuffer, argLen int) error {
 	var err error
 	if argLen == 0 {
-		_, err = buf.WriteString(s)
+		_, err = buf.Write(s)
 	} else {
+		pctx := ctx.(*postgresqlCtx)
+
 		start := 0
-		for pos, r := range s {
+		for pos, r := range bufToString(&s) {
 			if start > pos {
 				continue
 			}
 			switch r {
 			case '\\':
 				if pos < len(s)-1 && s[pos+1] == '?' {
-					_, err = buf.Write([]byte(s)[start:pos])
+					_, err = buf.Write(s[start:pos])
 					if err == nil {
 						err = buf.WriteByte('?')
 					}
 					start = pos + 2
 				}
 			case '?':
-				if pctx, ok := ctx.(*postgresqlCtx); ok {
-					_, err = buf.Write([]byte(s)[start:pos])
-					start = pos + 1
+				_, err = buf.Write(s[start:pos])
+				start = pos + 1
+				if err == nil {
+					err = buf.WriteByte('$')
 					if err == nil {
-						err = buf.WriteByte('$')
-						if err == nil {
-							buf.B = strconv.AppendInt(buf.B, int64(pctx.argNo), 10)
-							pctx.argNo++
-						}
+						buf.B = strconv.AppendInt(buf.B, int64(pctx.argNo), 10)
+						pctx.argNo++
 					}
 				}
 			}
@@ -116,7 +115,7 @@ func (d *postgreSQL) WriteString(ctx DialectCtx, s string, buf *bytebufferpool.B
 			}
 		}
 		if err == nil && start < len(s)-1 {
-			_, err = buf.Write([]byte(s)[start:])
+			_, err = buf.Write(s[start:])
 		}
 	}
 	return err

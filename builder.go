@@ -7,25 +7,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 )
 
-/*
-TODO:
-
-1. Postgresql arguments (done)
-2. Missing methods:
-
-	.Union(method, query)   UNION, UNION ALL, INTERSECT, EXCEPT
-
-	.SubQuery(query)
-
-	.Wrap(prefix, suffix) - .Wrap("exists (", ")")
-	.With(expression, query)
-
-3. Builder optimisation (global cache of chunks, binary heap for chunks)
-4. Try channel-based storage for Buffer and reused Stmt instances (instead of sync.Pool) - done
-5. Cache built queries (https://github.com/cespare/xxhash)?
-6. Use ByteBuffer for chunks
-*/
-
 var defaultBuilder = &Builder{Dialect: NoDialect()}
 
 /*
@@ -168,10 +149,11 @@ func DeleteFrom(tableName string) *Stmt {
 }
 
 type stmtChunk struct {
-	pos    int
-	sql    string
-	sep    string
-	argLen int
+	pos     int
+	bufLow  int
+	bufHigh int
+	hasExpr bool
+	argLen  int
 }
 type stmtChunks []stmtChunk
 
@@ -199,7 +181,8 @@ type Stmt struct {
 	builder *Builder
 	pos     int
 	chunks  stmtChunks
-	sql     string
+	buf     *bytebufferpool.ByteBuffer
+	sql     *bytebufferpool.ByteBuffer
 	args    []interface{}
 	dest    []interface{}
 }
@@ -288,9 +271,9 @@ tableName argument can be a SQL fragment:
 func (q *Stmt) InsertInto(tableName string) *Stmt {
 	q.clause(posInsert, "INSERT INTO")
 	q.Expr(tableName)
-	q.clause(posInsertFields, "(")
-	q.clause(posValues, ") VALUES (")
-	q.clause(posValuesEnd, ")")
+	q.clause(posInsertFields-1, "(")
+	q.clause(posValues-1, ") VALUES (")
+	q.clause(posValues+1, ")")
 	q.pos = posInsertFields
 	return q
 }
@@ -452,10 +435,8 @@ Clause adds a clause to a statement.
 */
 func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 	p := posEnd
-	for _, chunk := range q.chunks {
-		if chunk.pos > q.pos {
-			p = chunk.pos + 1
-		}
+	if len(q.chunks) > 0 {
+		p = (&q.chunks[len(q.chunks)-1]).pos + 10
 	}
 	q.clause(p, expr, args...)
 	return q
@@ -463,38 +444,27 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 
 // Build returns SQL statement and list of arguments to be passed to database driver for execution.
 func (q *Stmt) Build() (sql string, args []interface{}) {
-	sql = q.sql
-	if sql == "" {
+	if q.sql == nil {
 		ctx := q.builder.Dialect.NewCtx()
 		if ctx != nil {
 			defer ctx.Close()
 		}
 		// Build a query
-		buf := bytebufferpool.Get()
+		buf := getBuffer()
+		q.sql = buf
 
-		sep := ""
 		pos := 0
-		for _, chunk := range q.chunks {
-			if chunk.pos > pos && sep != "" {
-				sep = " "
-				pos = chunk.pos
+		for n, chunk := range q.chunks {
+			// Separate clauses with spaces
+			if n > 0 && chunk.pos > pos {
+				q.builder.Dialect.WriteString(ctx, []byte{' '}, buf, 0)
 			}
 			// Ignore empty strings
-			if l := len(chunk.sql); l > 0 {
-				if sep != "" {
-					q.builder.Dialect.WriteString(ctx, sep, buf, 0)
-				}
-				q.builder.Dialect.WriteString(ctx, chunk.sql, buf, chunk.argLen)
-				sep = chunk.sep
-			}
+			q.builder.Dialect.WriteString(ctx, q.buf.B[chunk.bufLow:chunk.bufHigh], buf, chunk.argLen)
+			pos = chunk.pos
 		}
-
-		sql = buf.String()
-		q.sql = sql
-
-		bytebufferpool.Put(buf)
 	}
-	return sql, q.args
+	return bufToString(&q.sql.B), q.args
 }
 
 // Dest returns a list of value pointers passed via To method calls.
@@ -505,7 +475,10 @@ func (q *Stmt) Dest() []interface{} {
 
 // Invalidate forces a rebuild on next query execution
 func (q *Stmt) Invalidate() {
-	q.sql = ""
+	if q.sql != nil {
+		putBuffer(q.sql)
+		q.sql = nil
+	}
 }
 
 /*
@@ -524,34 +497,16 @@ Close can be used to reuse memory allocated for SQL statement builder instances:
 Stmt instance should not be used after Close method call.
 */
 func (q *Stmt) Close() {
-	q.chunks = q.chunks[:0]
-	q.sql = ""
-	if len(q.args) > 0 {
-		for n := range q.args {
-			q.args[n] = nil
-		}
-		q.args = q.args[:0]
-	}
-	if len(q.dest) > 0 {
-		for n := range q.dest {
-			q.dest[n] = nil
-		}
-		q.dest = q.dest[:0]
-	}
 	reuseStmt(q)
 }
 
 // addChunk adds a clause or expression to a statement.
 func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) *stmtChunk {
 	argLen := len(args)
-	newChunk := stmtChunk{
-		pos:    pos,
-		sep:    sep,
-		sql:    expr,
-		argLen: argLen,
-	}
+	bufLow := len(q.buf.B)
 	index := len(q.chunks)
 	argPos := 0
+
 	// Find the position to insert a chunk to
 	for n, chunk := range q.chunks {
 		if chunk.pos > pos {
@@ -561,17 +516,55 @@ func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) *s
 		argPos += chunk.argLen
 	}
 
-	// Insert a chunk
-	if cap(q.chunks) == len(q.chunks) {
-		chunks := make(stmtChunks, len(q.chunks), cap(q.chunks)*2)
-		copy(chunks, q.chunks)
-		q.chunks = chunks
+	var addNew = true
+
+	// See if an existing chunk can be extended
+	if index > 0 && len(q.chunks) > 0 {
+		chunk := &q.chunks[index-1]
+		if chunk.pos == pos {
+			// Write a separator
+			if chunk.hasExpr {
+				q.buf.WriteString(sep)
+			} else {
+				q.buf.WriteString(" ")
+			}
+			if chunk.bufHigh == bufLow {
+				// Do not add a chunk
+				addNew = false
+				// Return the updated one
+				index = index - 1
+				// Update the existing one
+				q.buf.WriteString(expr)
+				chunk.argLen += argLen
+				chunk.bufHigh = len(q.buf.B)
+				chunk.hasExpr = true
+			}
+		}
 	}
 
-	q.chunks = append(q.chunks, newChunk)
-	if index < len(q.chunks)-1 {
-		copy(q.chunks[index+1:], q.chunks[index:])
-		q.chunks[index] = newChunk
+	if addNew {
+		// Insert a new chunk
+		q.buf.WriteString(expr)
+
+		if cap(q.chunks) == len(q.chunks) {
+			chunks := make(stmtChunks, len(q.chunks), cap(q.chunks)*2)
+			copy(chunks, q.chunks)
+			q.chunks = chunks
+		}
+
+		chunk := stmtChunk{
+			pos:     pos,
+			bufLow:  bufLow,
+			bufHigh: len(q.buf.B),
+			argLen:  argLen,
+			hasExpr: true,
+		}
+
+		q.chunks = append(q.chunks, chunk)
+		if index < len(q.chunks)-1 {
+			copy(q.chunks[index+1:], q.chunks[index:])
+			q.chunks[index] = chunk
+		}
 	}
 
 	// Insert query arguments
@@ -593,7 +586,9 @@ func (q *Stmt) clause(pos int, expr string, args ...interface{}) *stmtChunk {
 			return nil
 		}
 	}
-	return q.addChunk(pos, expr, args, " ")
+	chunk := q.addChunk(pos, expr, args, " ")
+	chunk.hasExpr = false
+	return chunk
 }
 
 const (
@@ -604,7 +599,6 @@ const (
 	posInsert
 	posInsertFields
 	posValues
-	posValuesEnd
 	posDelete
 	posUpdate
 	posSet

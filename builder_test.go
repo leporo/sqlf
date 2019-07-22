@@ -10,10 +10,11 @@ import (
 )
 
 func TestNewBuilder(t *testing.T) {
+	sqlf.SetDialect(sqlf.NoDialect())
 	q := sqlf.New("SELECT *").From("table")
 	defer q.Close()
 	sql, args := q.Build()
-	assert.Equal(t, sql, "SELECT * FROM table")
+	assert.Equal(t, "SELECT * FROM table", sql)
 	assert.Nil(t, args, "Argument list should be empty")
 }
 
@@ -34,7 +35,7 @@ func TestMixedOrder(t *testing.T) {
 }
 
 func TestClause(t *testing.T) {
-	q := sqlf.Select("id").From("table").Clause("FETCH NEXT").Where("id > ?", 42).Clause("FOR UPDATE")
+	q := sqlf.Select("id").From("table").Where("id > ?", 42).Clause("FETCH NEXT").Clause("FOR UPDATE")
 	defer q.Close()
 	sql, args := q.Build()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? FETCH NEXT FOR UPDATE", sql)
@@ -99,5 +100,22 @@ func TestTo(t *testing.T) {
 	defer q.Close()
 	dest := q.Dest()
 
-	assert.Equal(t, dest, []interface{}{&field1, &field2})
+	assert.Equal(t, []interface{}{&field1, &field2}, dest)
+}
+
+func TestManyClauses(t *testing.T) {
+	q := sqlf.From("table").
+		Select("field").
+		Where("id > ?", 2).
+		Clause("UNO").
+		Clause("DOS").
+		Clause("TRES").
+		Clause("QUATRO").
+		Offset(10).
+		Limit(10).
+		Clause("NO LOCK")
+	defer q.Close()
+	sql, _ := q.Build()
+
+	assert.Equal(t, "SELECT field FROM table WHERE id > ? UNO DOS TRES QUATRO LIMIT 10 OFFSET 10 NO LOCK", sql)
 }

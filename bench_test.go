@@ -2,7 +2,6 @@ package sqlf_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/leporo/sqlf"
@@ -10,19 +9,14 @@ import (
 
 var builderPg = sqlf.NewBuilder(sqlf.PostgreSQL())
 
-func BenchmarkString(b *testing.B) {
+func BenchmarkSelectDontClose(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		strings.Join([]string{"SELECT", "id", "FROM", "table", "WHERE", "id > ? AND id < ?"}, " ")
+		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
+		q.Build()
 	}
 }
 
 func BenchmarkSelect(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000).Build()
-	}
-}
-
-func BenchmarkSelectWithClose(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		q.Build()
@@ -30,7 +24,7 @@ func BenchmarkSelectWithClose(b *testing.B) {
 	}
 }
 
-func BenchmarkSelectWithClosePg(b *testing.B) {
+func BenchmarkSelectPg(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		q := builderPg.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		q.Build()
