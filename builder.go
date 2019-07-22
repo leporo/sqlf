@@ -1,7 +1,6 @@
 package sqlf
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/valyala/bytebufferpool"
@@ -48,6 +47,7 @@ database engines:
 	// ...
 	qPg.Close()
 */
+// FIXME: Name sounds like a one-method interface
 type Builder struct {
 	Dialect Dialect
 }
@@ -376,13 +376,13 @@ func (q *Stmt) Having(expr string, args ...interface{}) *Stmt {
 
 // Limit adds a limit on number of returned rows
 func (q *Stmt) Limit(limit int) *Stmt {
-	q.clause(posLimit, fmt.Sprintf("LIMIT %d", limit))
+	q.clause(posLimit, "LIMIT ?", limit)
 	return q
 }
 
 // Offset adds a limit on number of returned rows
 func (q *Stmt) Offset(offset int) *Stmt {
-	q.clause(posOffset, fmt.Sprintf("OFFSET %d", offset))
+	q.clause(posOffset, "OFFSET ?", offset)
 	return q
 }
 
@@ -442,13 +442,10 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 	return q
 }
 
-// Build returns SQL statement and list of arguments to be passed to database driver for execution.
+// Build method returns a bult SQL statement and list of arguments to be passed to database driver for execution.
 func (q *Stmt) Build() (sql string, args []interface{}) {
 	if q.sql == nil {
 		ctx := q.builder.Dialect.NewCtx()
-		if ctx != nil {
-			defer ctx.Close()
-		}
 		// Build a query
 		buf := getBuffer()
 		q.sql = buf
@@ -457,11 +454,14 @@ func (q *Stmt) Build() (sql string, args []interface{}) {
 		for n, chunk := range q.chunks {
 			// Separate clauses with spaces
 			if n > 0 && chunk.pos > pos {
-				q.builder.Dialect.WriteString(ctx, []byte{' '}, buf, 0)
+				q.builder.Dialect.WriteString(ctx, space, buf, 0)
 			}
-			// Ignore empty strings
 			q.builder.Dialect.WriteString(ctx, q.buf.B[chunk.bufLow:chunk.bufHigh], buf, chunk.argLen)
 			pos = chunk.pos
+		}
+
+		if ctx != nil {
+			ctx.Close()
 		}
 	}
 	return bufToString(&q.sql.B), q.args
@@ -501,27 +501,21 @@ func (q *Stmt) Close() {
 }
 
 // addChunk adds a clause or expression to a statement.
-func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) *stmtChunk {
+func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) (index int) {
 	argLen := len(args)
 	bufLow := len(q.buf.B)
-	index := len(q.chunks)
-	argPos := 0
+	index = len(q.chunks)
+	argTail := 0
+	addNew := true
 
 	// Find the position to insert a chunk to
-	for n, chunk := range q.chunks {
-		if chunk.pos > pos {
-			index = n
-			break
-		}
-		argPos += chunk.argLen
-	}
-
-	var addNew = true
-
-	// See if an existing chunk can be extended
-	if index > 0 && len(q.chunks) > 0 {
-		chunk := &q.chunks[index-1]
-		if chunk.pos == pos {
+loop:
+	for i := index - 1; i >= 0; i-- {
+		chunk := &q.chunks[i]
+		index = i
+		switch {
+		// See if an existing chunk can be extended
+		case chunk.pos == pos:
 			// Write a separator
 			if chunk.hasExpr {
 				q.buf.WriteString(sep)
@@ -531,14 +525,21 @@ func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) *s
 			if chunk.bufHigh == bufLow {
 				// Do not add a chunk
 				addNew = false
-				// Return the updated one
-				index = index - 1
 				// Update the existing one
 				q.buf.WriteString(expr)
 				chunk.argLen += argLen
 				chunk.bufHigh = len(q.buf.B)
 				chunk.hasExpr = true
+			} else {
+				index = i + 1
 			}
+			break loop
+		// No existing chunks of this type
+		case chunk.pos < pos:
+			index = i + 1
+			break loop
+		default:
+			argTail += chunk.argLen
 		}
 	}
 
@@ -569,27 +570,36 @@ func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) *s
 
 	// Insert query arguments
 	if argLen > 0 {
-		q.args = insertAt(q.args, args, argPos)
+		q.args = insertAt(q.args, args, len(q.args)-argTail)
 	}
 	q.Invalidate()
 
-	return &q.chunks[index]
+	return index
 }
 
-// clause adds a clause at given pos unless there is one
-func (q *Stmt) clause(pos int, expr string, args ...interface{}) *stmtChunk {
+// clause adds a clause at given pos unless there is one.
+// Returns a chunk index.
+func (q *Stmt) clause(pos int, expr string, args ...interface{}) (index int) {
 	// Save pos for Expr calls
 	q.pos = pos
-	// See if clause was already added
-	for _, chunk := range q.chunks {
-		if chunk.pos == pos {
-			return nil
+	// See if clause was already added.
+loop:
+	for i := len(q.chunks) - 1; i >= 0; i-- {
+		chunk := &q.chunks[i]
+		switch {
+		case chunk.pos == pos:
+			// FIXME: Return the first clause chunk index (at the moment it returns the last expression)
+			return i
+		case chunk.pos < pos:
+			break loop
 		}
 	}
-	chunk := q.addChunk(pos, expr, args, " ")
-	chunk.hasExpr = false
-	return chunk
+	index = q.addChunk(pos, expr, args, " ")
+	q.chunks[index].hasExpr = false
+	return index
 }
+
+var space = []byte{' '}
 
 const (
 	_        = iota

@@ -13,7 +13,7 @@ func insertAt(dest, src []interface{}, index int) []interface{} {
 		if cap(dest) < newLen {
 			newCap := cap(dest) * 2
 			if newCap == 0 {
-				newCap = 5
+				newCap = 10
 			}
 			qargs := make([]interface{}, oldLen, newCap)
 			copy(qargs, dest)

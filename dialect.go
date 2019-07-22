@@ -114,7 +114,7 @@ func (d *postgreSQL) WriteString(ctx DialectCtx, s []byte, buf *bytebufferpool.B
 				break
 			}
 		}
-		if err == nil && start < len(s)-1 {
+		if err == nil && start < len(s) {
 			_, err = buf.Write(s[start:])
 		}
 	}

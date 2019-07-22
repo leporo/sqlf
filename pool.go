@@ -9,7 +9,6 @@ import (
 var (
 	stmtPool  = sync.Pool{New: newStmt}
 	pgCtxPool = sync.Pool{New: newPgCtx}
-	bufPool   = sync.Pool{New: newBuf}
 )
 
 func newStmt() interface{} {
@@ -63,21 +62,10 @@ func putPgCtx(ctx *postgresqlCtx) {
 	pgCtxPool.Put(ctx)
 }
 
-func newBuf() interface{} {
-	return &bytebufferpool.ByteBuffer{
-		B: make([]byte, 0, 256),
-	}
-}
-
 func getBuffer() *bytebufferpool.ByteBuffer {
-	// return bytebufferpool.Get()
-	return bufPool.Get().(*bytebufferpool.ByteBuffer)
+	return bytebufferpool.Get()
 }
 
 func putBuffer(buf *bytebufferpool.ByteBuffer) {
-	// bytebufferpool.Put(buf)
-	if len(buf.B) > 0 {
-		buf.Reset()
-	}
-	bufPool.Put(buf)
+	bytebufferpool.Put(buf)
 }

@@ -74,10 +74,10 @@ func TestPgPlaceholders(t *testing.T) {
 	q := builderPg.From("series").
 		Select("id").
 		Where("time > ?", time.Now().Add(time.Hour*-24*14)).
-		Where("time < ?", time.Now().Add(time.Hour*-24*7))
+		Where("(time < ?)", time.Now().Add(time.Hour*-24*7))
 	defer q.Close()
 	sql, _ := q.Build()
-	assert.Equal(t, "SELECT id FROM series WHERE time > $1 AND time < $2", sql)
+	assert.Equal(t, "SELECT id FROM series WHERE time > $1 AND (time < $2)", sql)
 }
 
 func TestPgPlaceholderEscape(t *testing.T) {
@@ -112,10 +112,11 @@ func TestManyClauses(t *testing.T) {
 		Clause("TRES").
 		Clause("QUATRO").
 		Offset(10).
-		Limit(10).
+		Limit(5).
 		Clause("NO LOCK")
 	defer q.Close()
-	sql, _ := q.Build()
+	sql, args := q.Build()
 
-	assert.Equal(t, "SELECT field FROM table WHERE id > ? UNO DOS TRES QUATRO LIMIT 10 OFFSET 10 NO LOCK", sql)
+	assert.Equal(t, "SELECT field FROM table WHERE id > ? UNO DOS TRES QUATRO LIMIT ? OFFSET ? NO LOCK", sql)
+	assert.Equal(t, []interface{}{2, 5, 10}, args)
 }

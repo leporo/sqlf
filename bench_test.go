@@ -7,6 +7,7 @@ import (
 	"github.com/leporo/sqlf"
 )
 
+var builderNo = sqlf.NewBuilder(sqlf.NoDialect())
 var builderPg = sqlf.NewBuilder(sqlf.PostgreSQL())
 
 func BenchmarkSelectDontClose(b *testing.B) {
@@ -107,4 +108,68 @@ func BenchmarkDest(b *testing.B) {
 			Select("field2").To(&field2)
 		q.Close()
 	}
+}
+
+func selectComplex(b *testing.B, builder *sqlf.Builder) {
+	for n := 0; n < b.N; n++ {
+		q := builder.Select("DISTINCT a, b, z, y, x").
+			// Distinct().
+			From("c").
+			Where("d = ? OR e = ?", 1, "wat").
+			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("g = ?", 3).
+			// Where(dbr.Eq{"h": []int{1, 2, 3}}).
+			GroupBy("i").
+			GroupBy("ii").
+			GroupBy("iii").
+			Having("j = k").
+			Having("jj = ?", 1).
+			Having("jjj = ?", 2).
+			OrderBy("l").
+			OrderBy("l").
+			OrderBy("l").
+			Limit(7).
+			Offset(8)
+		q.Build()
+		q.Close()
+	}
+}
+
+func selectSubquery(b *testing.B, builder *sqlf.Builder) {
+	for n := 0; n < b.N; n++ {
+		sq := builder.Select("id").
+			From("tickets").
+			Where("subdomain_id = ? and (state = ? or state = ?)", 1, "open", "spam")
+		subQuery, _ := sq.Build()
+
+		q := builder.Select("DITINCT a, b").
+			Select(fmt.Sprintf("(%s) AS subq", subQuery)).
+			From("c").
+			// Distinct().
+			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("g = ?", 3).
+			OrderBy("l").
+			OrderBy("l").
+			Limit(7).
+			Offset(8)
+		q.Build()
+		q.Close()
+		sq.Close()
+	}
+}
+
+func BenchmarkSelectComplex(b *testing.B) {
+	selectComplex(b, builderNo)
+}
+
+func BenchmarkSelectComplexPg(b *testing.B) {
+	selectComplex(b, builderPg)
+}
+
+func BenchmarkSelectSubquery(b *testing.B) {
+	selectSubquery(b, builderNo)
+}
+
+func BenchmarkSelectSubqueryPostgreSQL(b *testing.B) {
+	selectSubquery(b, builderPg)
 }

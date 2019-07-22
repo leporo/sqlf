@@ -17,28 +17,28 @@ func ExampleStmt_Limit() {
 	q := sqlf.Select("id").From("table").Limit(10)
 	sql, _ := q.Build()
 	fmt.Println(sql)
-	// Output: SELECT id FROM table LIMIT 10
+	// Output: SELECT id FROM table LIMIT ?
 }
 
 func ExampleStmt_Offset() {
 	q := sqlf.Select("id").From("table").Limit(10).Offset(10)
 	sql, _ := q.Build()
 	fmt.Println(sql)
-	// Output: SELECT id FROM table LIMIT 10 OFFSET 10
+	// Output: SELECT id FROM table LIMIT ? OFFSET ?
 }
 
 func ExampleStmt_Paginate() {
-	sql, _ := sqlf.Select("id").From("table").Paginate(5, 10).Build()
-	fmt.Println(sql)
-	sql, _ = sqlf.Select("id").From("table").Paginate(1, 10).Build()
-	fmt.Println(sql)
+	sql, args := sqlf.Select("id").From("table").Paginate(5, 10).Build()
+	fmt.Println(sql, args)
+	sql, args = sqlf.Select("id").From("table").Paginate(1, 10).Build()
+	fmt.Println(sql, args)
 	// Zero and negative values are replaced with 1
-	sql, _ = sqlf.Select("id").From("table").Paginate(-1, -1).Build()
-	fmt.Println(sql)
+	sql, args = sqlf.Select("id").From("table").Paginate(-1, -1).Build()
+	fmt.Println(sql, args)
 	// Output:
-	// SELECT id FROM table LIMIT 10 OFFSET 40
-	// SELECT id FROM table LIMIT 10
-	// SELECT id FROM table LIMIT 1
+	// SELECT id FROM table LIMIT ? OFFSET ? [10 40]
+	// SELECT id FROM table LIMIT ? [10]
+	// SELECT id FROM table LIMIT ? [1]
 }
 
 func ExampleStmt_Update() {
