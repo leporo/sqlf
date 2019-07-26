@@ -375,13 +375,13 @@ func (q *Stmt) Having(expr string, args ...interface{}) *Stmt {
 }
 
 // Limit adds a limit on number of returned rows
-func (q *Stmt) Limit(limit int) *Stmt {
+func (q *Stmt) Limit(limit interface{}) *Stmt {
 	q.clause(posLimit, "LIMIT ?", limit)
 	return q
 }
 
 // Offset adds a limit on number of returned rows
-func (q *Stmt) Offset(offset int) *Stmt {
+func (q *Stmt) Offset(offset interface{}) *Stmt {
 	q.clause(posOffset, "OFFSET ?", offset)
 	return q
 }
