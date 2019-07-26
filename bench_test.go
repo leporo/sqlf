@@ -7,28 +7,27 @@ import (
 	"github.com/leporo/sqlf"
 )
 
-var builderNo = sqlf.NewBuilder(sqlf.NoDialect())
-var builderPg = sqlf.NewBuilder(sqlf.PostgreSQL())
+var s string
 
 func BenchmarkSelectDontClose(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
-		q.Build()
+		s = q.String()
 	}
 }
 
 func BenchmarkSelect(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
-		q.Build()
+		s = q.String()
 		q.Close()
 	}
 }
 
 func BenchmarkSelectPg(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		q := builderPg.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
-		q.Build()
+		q := sqlf.PostgreSQL.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
+		s = q.String()
 		q.Close()
 	}
 }
@@ -47,7 +46,7 @@ func BenchmarkManyFields(b *testing.B) {
 		for _, field := range fields {
 			q.Select(field)
 		}
-		q.Build()
+		s = q.String()
 		q.Close()
 	}
 }
@@ -62,11 +61,11 @@ func BenchmarkManyFieldsPg(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		q := builderPg.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
+		q := sqlf.PostgreSQL.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		for _, field := range fields {
 			q.Select(field)
 		}
-		q.Build()
+		s = q.String()
 		q.Close()
 	}
 }
@@ -74,17 +73,17 @@ func BenchmarkManyFieldsPg(b *testing.B) {
 func BenchmarkMixedOrder(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").Where("id > ?", 42).From("table").Where("id < ?", 1000)
-		q.Build()
+		s = q.String()
 		q.Close()
 	}
 }
 
 func BenchmarkBuildPg(b *testing.B) {
-	q := builderPg.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
+	q := sqlf.PostgreSQL.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 
 	for i := 0; i < b.N; i++ {
 		q.Invalidate()
-		q.Build()
+		s = q.String()
 	}
 }
 
@@ -93,7 +92,7 @@ func BenchmarkBuild(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		q.Invalidate()
-		q.Build()
+		s = q.String()
 	}
 }
 
@@ -110,9 +109,9 @@ func BenchmarkDest(b *testing.B) {
 	}
 }
 
-func selectComplex(b *testing.B, builder *sqlf.Builder) {
+func selectComplex(b *testing.B, dialect sqlf.Dialect) {
 	for n := 0; n < b.N; n++ {
-		q := builder.Select("DISTINCT a, b, z, y, x").
+		q := dialect.Select("DISTINCT a, b, z, y, x").
 			// Distinct().
 			From("c").
 			Where("d = ? OR e = ?", 1, "wat").
@@ -130,19 +129,19 @@ func selectComplex(b *testing.B, builder *sqlf.Builder) {
 			OrderBy("l").
 			Limit(7).
 			Offset(8)
-		q.Build()
+		s = q.String()
 		q.Close()
 	}
 }
 
-func selectSubquery(b *testing.B, builder *sqlf.Builder) {
+func selectSubqueryFmt(b *testing.B, dialect sqlf.Dialect) {
 	for n := 0; n < b.N; n++ {
-		sq := builder.Select("id").
+		sq := dialect.Select("id").
 			From("tickets").
 			Where("subdomain_id = ? and (state = ? or state = ?)", 1, "open", "spam")
-		subQuery, _ := sq.Build()
+		subQuery := sq.String()
 
-		q := builder.Select("DITINCT a, b").
+		q := dialect.Select("DISTINCT a, b").
 			Select(fmt.Sprintf("(%s) AS subq", subQuery)).
 			From("c").
 			// Distinct().
@@ -152,24 +151,67 @@ func selectSubquery(b *testing.B, builder *sqlf.Builder) {
 			OrderBy("l").
 			Limit(7).
 			Offset(8)
-		q.Build()
+		s = q.String()
 		q.Close()
 		sq.Close()
 	}
 }
 
+func selectSubquery(b *testing.B, dialect sqlf.Dialect) {
+	for n := 0; n < b.N; n++ {
+		q := dialect.Select("DISTINCT a, b").
+			SubQuery("(", ") AS subq", sqlf.Select("id").
+				From("tickets").
+				Where("subdomain_id = ? and (state = ? or state = ?)", 1, "open", "spam")).
+			From("c").
+			// Distinct().
+			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("g = ?", 3).
+			OrderBy("l").
+			OrderBy("l").
+			Limit(7).
+			Offset(8)
+		s = q.String()
+		q.Close()
+	}
+}
+
 func BenchmarkSelectComplex(b *testing.B) {
-	selectComplex(b, builderNo)
+	selectComplex(b, sqlf.NoDialect)
 }
 
 func BenchmarkSelectComplexPg(b *testing.B) {
-	selectComplex(b, builderPg)
+	selectComplex(b, sqlf.PostgreSQL)
+}
+
+func BenchmarkSelectSubqueryFmt(b *testing.B) {
+	selectSubqueryFmt(b, sqlf.NoDialect)
+}
+
+func BenchmarkSelectSubqueryFmtPostgreSQL(b *testing.B) {
+	selectSubqueryFmt(b, sqlf.PostgreSQL)
 }
 
 func BenchmarkSelectSubquery(b *testing.B) {
-	selectSubquery(b, builderNo)
+	selectSubquery(b, sqlf.NoDialect)
 }
 
 func BenchmarkSelectSubqueryPostgreSQL(b *testing.B) {
-	selectSubquery(b, builderPg)
+	selectSubquery(b, sqlf.PostgreSQL)
+}
+
+func BenchmarkWith(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		q := sqlf.From("orders").
+			With("regional_sales", sqlf.From("orders").Select("region, SUM(amount) AS total_sales").GroupBy("region")).
+			With("top_regions", sqlf.From("regional_sales").Select("region").Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
+			Select("region").
+			Select("product").
+			Select("SUM(quantity) AS product_units").
+			Select("SUM(amount) AS product_sales").
+			Where("region IN (SELECT region FROM top_regions)").
+			GroupBy("region, product")
+		s = q.String()
+		q.Close()
+	}
 }

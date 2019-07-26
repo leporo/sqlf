@@ -7,8 +7,7 @@ import (
 )
 
 var (
-	stmtPool  = sync.Pool{New: newStmt}
-	pgCtxPool = sync.Pool{New: newPgCtx}
+	stmtPool = sync.Pool{New: newStmt}
 )
 
 func newStmt() interface{} {
@@ -17,9 +16,9 @@ func newStmt() interface{} {
 	}
 }
 
-func getStmt(b *Builder) *Stmt {
+func getStmt(d Dialect) *Stmt {
 	stmt := stmtPool.Get().(*Stmt)
-	stmt.builder = b
+	stmt.dialect = d
 	stmt.buf = getBuffer()
 	return stmt
 }
@@ -46,20 +45,6 @@ func reuseStmt(q *Stmt) {
 	q.sql = nil
 
 	stmtPool.Put(q)
-}
-
-func newPgCtx() interface{} {
-	return &postgresqlCtx{argNo: 1}
-}
-
-func getPgCtx() *postgresqlCtx {
-	ctx := pgCtxPool.Get().(*postgresqlCtx)
-	ctx.argNo = 1
-	return ctx
-}
-
-func putPgCtx(ctx *postgresqlCtx) {
-	pgCtxPool.Put(ctx)
 }
 
 func getBuffer() *bytebufferpool.ByteBuffer {

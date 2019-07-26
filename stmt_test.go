@@ -10,18 +10,19 @@ import (
 )
 
 func TestNewBuilder(t *testing.T) {
-	sqlf.SetDialect(sqlf.NoDialect())
+	sqlf.SetDialect(sqlf.NoDialect)
 	q := sqlf.New("SELECT *").From("table")
 	defer q.Close()
-	sql, args := q.Build()
+	sql := q.String()
+	args := q.Args()
 	assert.Equal(t, "SELECT * FROM table", sql)
-	assert.Nil(t, args, "Argument list should be empty")
+	assert.Empty(t, args)
 }
 
 func TestBasicSelect(t *testing.T) {
 	q := sqlf.From("table").Select("id").Where("id > ?", 42).Where("id < ?", 1000)
 	defer q.Close()
-	sql, args := q.Build()
+	sql, args := q.String(), q.Args()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? AND id < ?", sql)
 	assert.Equal(t, []interface{}{42, 1000}, args)
 }
@@ -29,7 +30,7 @@ func TestBasicSelect(t *testing.T) {
 func TestMixedOrder(t *testing.T) {
 	q := sqlf.Select("id").Where("id > ?", 42).From("table").Where("id < ?", 1000)
 	defer q.Close()
-	sql, args := q.Build()
+	sql, args := q.SQL(), q.Args()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? AND id < ?", sql)
 	assert.Equal(t, []interface{}{42, 1000}, args)
 }
@@ -37,7 +38,7 @@ func TestMixedOrder(t *testing.T) {
 func TestClause(t *testing.T) {
 	q := sqlf.Select("id").From("table").Where("id > ?", 42).Clause("FETCH NEXT").Clause("FOR UPDATE")
 	defer q.Close()
-	sql, args := q.Build()
+	sql, args := q.SQL(), q.Args()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? FETCH NEXT FOR UPDATE", sql)
 	assert.Equal(t, []interface{}{42}, args)
 }
@@ -51,7 +52,7 @@ func TestManyFields(t *testing.T) {
 	for _, field := range []string{"uno", "dos", "tres"} {
 		q.Select(field)
 	}
-	sql, args := q.Build()
+	sql, args := q.SQL(), q.Args()
 	assert.Equal(t, "SELECT id, (id + ?) as id_1, (id + ?) as id_2, (id + ?) as id_3, uno, dos, tres FROM table WHERE id = ?", sql)
 	assert.Equal(t, []interface{}{10, 20, 30, 42}, args)
 }
@@ -62,7 +63,7 @@ func TestEvenMoreFields(t *testing.T) {
 	for n := 1; n <= 50; n++ {
 		q.Select(fmt.Sprintf("field_%d", n))
 	}
-	sql, args := q.Build()
+	sql, args := q.SQL(), q.Args()
 	assert.Equal(t, 0, len(args))
 	for n := 1; n <= 50; n++ {
 		field := fmt.Sprintf(", field_%d", n)
@@ -71,24 +72,25 @@ func TestEvenMoreFields(t *testing.T) {
 }
 
 func TestPgPlaceholders(t *testing.T) {
-	q := builderPg.From("series").
+	q := sqlf.PostgreSQL.From("series").
 		Select("id").
 		Where("time > ?", time.Now().Add(time.Hour*-24*14)).
 		Where("(time < ?)", time.Now().Add(time.Hour*-24*7))
 	defer q.Close()
-	sql, _ := q.Build()
+	sql, _ := q.SQL(), q.Args()
 	assert.Equal(t, "SELECT id FROM series WHERE time > $1 AND (time < $2)", sql)
 }
 
 func TestPgPlaceholderEscape(t *testing.T) {
-	q := builderPg.From("series").
+	q := sqlf.PostgreSQL.From("series").
 		Select("id").
 		Where("time \\?> ? + 1", time.Now().Add(time.Hour*-24*14)).
 		Where("time < ?", time.Now().Add(time.Hour*-24*7))
 	defer q.Close()
-	sql, _ := q.Build()
+	sql, _ := q.SQL(), q.Args()
 	assert.Equal(t, "SELECT id FROM series WHERE time ?> $1 + 1 AND time < $2", sql)
 }
+
 func TestTo(t *testing.T) {
 	var (
 		field1 int
@@ -115,8 +117,23 @@ func TestManyClauses(t *testing.T) {
 		Limit(5).
 		Clause("NO LOCK")
 	defer q.Close()
-	sql, args := q.Build()
+	sql, args := q.SQL(), q.Args()
 
 	assert.Equal(t, "SELECT field FROM table WHERE id > ? UNO DOS TRES QUATRO LIMIT ? OFFSET ? NO LOCK", sql)
 	assert.Equal(t, []interface{}{2, 5, 10}, args)
+}
+
+func TestWithRecursive(t *testing.T) {
+	q := sqlf.From("orders").
+		With("RECURSIVE regional_sales", sqlf.From("orders").Select("region, SUM(amount) AS total_sales").GroupBy("region")).
+		With("top_regions", sqlf.From("regional_sales").Select("region").OrderBy("total_sales DESC").Limit(5)).
+		Select("region").
+		Select("product").
+		Select("SUM(quantity) AS product_units").
+		Select("SUM(amount) AS product_sales").
+		Where("region IN (SELECT region FROM top_regions)").
+		GroupBy("region, product")
+	defer q.Close()
+
+	assert.Equal(t, "WITH RECURSIVE regional_sales AS (SELECT region, SUM(amount) AS total_sales FROM orders GROUP BY region), top_regions AS (SELECT region FROM regional_sales ORDER BY total_sales DESC LIMIT ?) SELECT region, product, SUM(quantity) AS product_units, SUM(amount) AS product_sales FROM orders WHERE region IN (SELECT region FROM top_regions) GROUP BY region, product", q.String())
 }

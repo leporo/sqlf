@@ -6,101 +6,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 )
 
-var defaultBuilder = &Builder{Dialect: NoDialect()}
-
-/*
-SetDialect selects a Dialect to be used by default Builder
-
-	sqlf.SetDialect(sqlf.PostgreSQL())
-*/
-func SetDialect(dialect Dialect) {
-	defaultBuilder.Dialect = dialect
-}
-
-// NewBuilder creates a new SQL builder instance.
-func NewBuilder(dialect Dialect) *Builder {
-	return &Builder{Dialect: dialect}
-}
-
-/*
-Builder defines a way SQL statements are built.
-
-In most cases a default builder can be used:
-
-	sqlf.SetDialect(sqlf.PostgreSQL())
-	// ...
-	q := sqlf.From("user").Select("name").Where("id = ?", 42)
-	// Produces
-	// SELECT name FROM user WHERE id = $1
-
-Create a Builder instance if an application needs to access multiple
-database engines:
-
-	mysqlBuilder := &sqlf.Builder{}
-	pgBuilder := sqlf.Builder{dialect: sqlf.PostgreSQL()}
-
-	qMy := mysqlBuilder.From("table").Select("field").Where("id = ?", 42)
-	// ...
-	qMy.Close()
-	// ...
-	qPg := pgBuilder.From("table").Select("field").Where("id = ?", 24)
-	// ...
-	qPg.Close()
-*/
-// FIXME: Name sounds like a one-method interface
-type Builder struct {
-	Dialect Dialect
-}
-
-/*
-New initializes a SQL statement builder instance with an arbitrary verb.
-
-Use Select, InsertInto, DeleteFrom methods to create
-an instance of an SQL statement builder for common cases.
-*/
-func (b *Builder) New(verb string, args ...interface{}) *Stmt {
-	q := getStmt(b)
-	q.clause(posSelect, verb, args...)
-	return q
-}
-
-/*
-From creates a SELECT statement builder.
-*/
-func (b *Builder) From(expr string, args ...interface{}) *Stmt {
-	q := getStmt(b)
-	return q.From(expr, args...)
-}
-
-/*
-Select creates a SELECT statement builder.
-
-Consider using From method to start a SELECT statement - you may find
-it easier to read and maintain.
-*/
-func (b *Builder) Select(expr string, args ...interface{}) *Stmt {
-	q := getStmt(b)
-	return q.Select(expr, args...)
-}
-
-// Update creates an UPDATE statement builder.
-func (b *Builder) Update(tableName string) *Stmt {
-	q := getStmt(b)
-	return q.Update(tableName)
-}
-
-// InsertInto creates an INSERT statement builder.
-func (b *Builder) InsertInto(tableName string) *Stmt {
-	q := getStmt(b)
-	return q.InsertInto(tableName)
-}
-
-// DeleteFrom creates a DELETE statement builder.
-func (b *Builder) DeleteFrom(tableName string) *Stmt {
-	q := getStmt(b)
-	return q.DeleteFrom(tableName)
-}
-
 /*
 New initializes a SQL statement builder instance with an arbitrary verb.
 
@@ -108,14 +13,14 @@ Use sqlf.Select(), sqlf.Insert(), sqlf.Delete() to create
 an instance of a SQL statement builder for common cases.
 */
 func New(verb string, args ...interface{}) *Stmt {
-	return defaultBuilder.New(verb, args...)
+	return defaultDialect.New(verb, args...)
 }
 
 /*
 From creates a SELECT statement builder.
 */
 func From(expr string, args ...interface{}) *Stmt {
-	return defaultBuilder.From(expr, args...)
+	return defaultDialect.From(expr, args...)
 }
 
 /*
@@ -124,28 +29,28 @@ Select creates a SELECT statement builder.
 Note that From method can also be used to start a SELECT statement.
 */
 func Select(expr string, args ...interface{}) *Stmt {
-	return defaultBuilder.Select(expr, args...)
+	return defaultDialect.Select(expr, args...)
 }
 
 /*
 Update creates an UPDATE statement builder.
 */
 func Update(tableName string) *Stmt {
-	return defaultBuilder.Update(tableName)
+	return defaultDialect.Update(tableName)
 }
 
 /*
 InsertInto creates an INSERT statement builder.
 */
 func InsertInto(tableName string) *Stmt {
-	return defaultBuilder.InsertInto(tableName)
+	return defaultDialect.InsertInto(tableName)
 }
 
 /*
 DeleteFrom creates a DELETE statement builder.
 */
 func DeleteFrom(tableName string) *Stmt {
-	return defaultBuilder.DeleteFrom(tableName)
+	return defaultDialect.DeleteFrom(tableName)
 }
 
 type stmtChunk struct {
@@ -178,7 +83,7 @@ For an arbitrary SQL statement use New:
 	q.Close()
 */
 type Stmt struct {
-	builder *Builder
+	dialect Dialect
 	pos     int
 	chunks  stmtChunks
 	buf     *bytebufferpool.ByteBuffer
@@ -188,23 +93,22 @@ type Stmt struct {
 }
 
 /*
-Select adds a SELECT clause to a statement
+Select adds a SELECT clause to a statement and/or appends
+an expression that defines columns of a resulting data set.
 
 	q := sqlf.Select("field1, field2").From("table")
 
-Select can be called at any moment to add an expression to the list:
+Select can be called multiple times to add more columns:
 
-	q := sqlf.Select("field1").From("table")
+	q := sqlf.From("table").Select("field1")
 	if needField2 {
 		q.Select("field2")
 	}
-
-Note that a SELECT statement can also be started with call to From:
-
-	q := sqlf.From("table").
-		Select("field1")
 	// ...
 	q.Close()
+
+Note that a SELECT statement can also be started by a From method call.
+
 */
 func (q *Stmt) Select(expr string, args ...interface{}) *Stmt {
 	q.clause(posSelect, "SELECT")
@@ -386,7 +290,7 @@ func (q *Stmt) Offset(offset interface{}) *Stmt {
 	return q
 }
 
-// Paginate provides an easy way to set offset and limit
+// Paginate provides an easy way to set both offset and limit
 func (q *Stmt) Paginate(page, pageSize int) *Stmt {
 	if page < 1 {
 		page = 1
@@ -404,8 +308,16 @@ func (q *Stmt) Paginate(page, pageSize int) *Stmt {
 // Returning adds a RETURNING clause to a statement
 func (q *Stmt) Returning(expr string) *Stmt {
 	q.clause(posReturning, "RETURNING")
-	q.addChunk(q.pos, expr, nil, " , ")
+	q.addChunk(q.pos, expr, nil, ", ")
 	return q
+}
+
+// With prepends a statement with an WITH clause.
+// With method calls a Close method of a given query, so
+// make sure not to reuse it afterwards.
+func (q *Stmt) With(queryName string, query *Stmt) *Stmt {
+	q.clause(posWith, "WITH")
+	return q.SubQuery(queryName+" AS (", ")", query)
 }
 
 /*
@@ -426,6 +338,26 @@ func (q *Stmt) Expr(expr string, args ...interface{}) *Stmt {
 	return q
 }
 
+// SubQuery appends a sub query expression to a current clause of a statement.
+// SubQuery method call closes a given query, so
+// make sure not to reuse it afterwards.
+func (q *Stmt) SubQuery(prefix, suffix string, query *Stmt) *Stmt {
+	index := q.addChunk(q.pos, prefix, query.args, ", ")
+	chunk := &q.chunks[index]
+	// Make sure subquery is not dialect-specific.
+	if query.dialect != NoDialect {
+		query.dialect = NoDialect
+		query.Invalidate()
+	}
+	q.buf.WriteString(query.String())
+	q.buf.WriteString(suffix)
+	chunk.bufHigh = q.buf.Len()
+	// Close the subquery
+	query.Close()
+
+	return q
+}
+
 /*
 Clause adds a clause to a statement.
 
@@ -442,10 +374,10 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 	return q
 }
 
-// Build method returns a bult SQL statement and list of arguments to be passed to database driver for execution.
-func (q *Stmt) Build() (sql string, args []interface{}) {
+// String method builds and returns an SQL statement.
+func (q *Stmt) String() string {
 	if q.sql == nil {
-		ctx := q.builder.Dialect.NewCtx()
+		var argNo int64 = 1
 		// Build a query
 		buf := getBuffer()
 		q.sql = buf
@@ -454,17 +386,29 @@ func (q *Stmt) Build() (sql string, args []interface{}) {
 		for n, chunk := range q.chunks {
 			// Separate clauses with spaces
 			if n > 0 && chunk.pos > pos {
-				q.builder.Dialect.WriteString(ctx, space, buf, 0)
+				buf.Write(space)
 			}
-			q.builder.Dialect.WriteString(ctx, q.buf.B[chunk.bufLow:chunk.bufHigh], buf, chunk.argLen)
+			s := q.buf.B[chunk.bufLow:chunk.bufHigh]
+			if chunk.argLen > 0 && q.dialect == PostgreSQL {
+				argNo, _ = writePg(argNo, s, buf)
+			} else {
+				buf.Write(s)
+			}
 			pos = chunk.pos
 		}
-
-		if ctx != nil {
-			ctx.Close()
-		}
 	}
-	return bufToString(&q.sql.B), q.args
+	return bufToString(&q.sql.B)
+}
+
+// SQL method is an alias of String
+func (q *Stmt) SQL() string {
+	return q.String()
+}
+
+// Args returns the list of arguments to be passed to
+// database driver for statement execution.
+func (q *Stmt) Args() []interface{} {
+	return q.args
 }
 
 // Dest returns a list of value pointers passed via To method calls.
@@ -605,7 +549,6 @@ const (
 	_        = iota
 	posStart = 100 * iota
 	posWith
-	posWithEnd
 	posInsert
 	posInsertFields
 	posValues

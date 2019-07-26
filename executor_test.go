@@ -18,8 +18,9 @@ import (
 type dbEnv struct {
 	driver string
 	db     *sql.DB
-	sqlf   *sqlf.Builder
+	sqlf   sqlf.Dialect
 }
+
 type dbConfig struct {
 	driver  string
 	envVar  string
@@ -32,11 +33,11 @@ var dbList = []dbConfig{
 		driver:  "sqlite3",
 		envVar:  "SQLF_SQLITE_DSN",
 		defDSN:  ":memory:",
-		dialect: sqlf.NoDialect(),
+		dialect: sqlf.NoDialect,
 	},
 }
 
-var envs = make([]dbEnv, 0, 1)
+var envs = make([]dbEnv, 0, len(dbList))
 
 func init() {
 	connect()
@@ -66,7 +67,7 @@ func connect() {
 		envs = append(envs, dbEnv{
 			driver: config.driver,
 			db:     db,
-			sqlf:   sqlf.NewBuilder(config.dialect),
+			sqlf:   config.dialect,
 		})
 	}
 }

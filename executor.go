@@ -23,19 +23,18 @@ type ContextExecutor interface {
 
 // Query builds and executes the statement.
 // For every row of a returned dataset it calls a handler function.
-// If To method was invoked, rows.Scan is called before handler function is invoked.
+// If scan targets were set via To method calls, Query method automatically
+// executes rows.Scan right before calling a handler function.
 func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Rows)) error {
-	query, args := q.Build()
-
 	var (
 		rows *sql.Rows
 		err  error
 	)
 	// Fetch rows
 	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		rows, err = ctxExecutor.QueryContext(ctx, query, args...)
+		rows, err = ctxExecutor.QueryContext(ctx, q.String(), q.args...)
 	} else {
-		rows, err = db.Query(query, args...)
+		rows, err = db.Query(q.String(), q.args...)
 	}
 	if err != nil {
 		return err
@@ -71,13 +70,11 @@ func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Ro
 // QueryRow builds, executes the statement via Executor methods
 // and scans values to variables bound via To method calls.
 func (q *Stmt) QueryRow(ctx context.Context, db Executor) error {
-	query, args := q.Build()
-
 	var row *sql.Row
 	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		row = ctxExecutor.QueryRowContext(ctx, query, args...)
+		row = ctxExecutor.QueryRowContext(ctx, q.String(), q.args...)
 	} else {
-		row = db.QueryRow(query, args...)
+		row = db.QueryRow(q.String(), q.args...)
 	}
 
 	return row.Scan(q.dest...)
@@ -85,11 +82,9 @@ func (q *Stmt) QueryRow(ctx context.Context, db Executor) error {
 
 // Exec builds and executes the statement
 func (q *Stmt) Exec(ctx context.Context, db Executor) (sql.Result, error) {
-	query, args := q.Build()
-
 	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		return ctxExecutor.ExecContext(ctx, query, args...)
+		return ctxExecutor.ExecContext(ctx, q.String(), q.args...)
 	}
 
-	return db.Exec(query, args...)
+	return db.Exec(q.String(), q.args...)
 }
