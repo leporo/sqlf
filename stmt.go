@@ -321,28 +321,27 @@ func (q *Stmt) With(queryName string, query *Stmt) *Stmt {
 }
 
 /*
-Expr appends an expression to a current clause of a statement.
+Expr appends an expression to the most recently added clause.
 
-Expression is basically a comma-separated part of an SQL statement.
-
-Most common expressions are: lists of fields to be selected or updated,
-filtering (WHERE) conditions, ORDER BY clause elements.
-
-There are helper methods like .Select(), .From(), etc for these common cases,
-so you likely won't need to call .Expr() directly.
-
-But you may find it useful for special cases, like multiple WINDOW definitions.
+Expressions are separated with commas.
 */
 func (q *Stmt) Expr(expr string, args ...interface{}) *Stmt {
 	q.addChunk(q.pos, expr, args, ", ")
 	return q
 }
 
-// SubQuery appends a sub query expression to a current clause of a statement.
-// SubQuery method call closes a given query, so
-// make sure not to reuse it afterwards.
+/*
+SubQuery appends a sub query expression to a current clause.
+
+SubQuery method call closes the Stmt passed as query parameter.
+Do not reuse it afterwards.
+*/
 func (q *Stmt) SubQuery(prefix, suffix string, query *Stmt) *Stmt {
-	index := q.addChunk(q.pos, prefix, query.args, ", ")
+	delimiter := ", "
+	if q.pos == posWhere {
+		delimiter = " AND "
+	}
+	index := q.addChunk(q.pos, prefix, query.args, delimiter)
 	chunk := &q.chunks[index]
 	// Make sure subquery is not dialect-specific.
 	if query.dialect != NoDialect {
@@ -359,14 +358,15 @@ func (q *Stmt) SubQuery(prefix, suffix string, query *Stmt) *Stmt {
 }
 
 /*
-Clause adds a clause to a statement.
+Clause appends a raw SQL fragment to the statement.
 
-    q := sqlf.Select("sum(salary) OVER w").From("empsalary")
-    q.Clause("WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)")
+Use it to add a raw SQL fragment like ON CONFLICT, ON DUPLICATE KEY, WINDOW, etc.
 
+An SQL fragment added via Clause method appears after the last clause previously
+added. If called first, Clause method prepends a statement with a raw SQL.
 */
 func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
-	p := posEnd
+	p := posStart
 	if len(q.chunks) > 0 {
 		p = (&q.chunks[len(q.chunks)-1]).pos + 10
 	}
@@ -400,24 +400,41 @@ func (q *Stmt) String() string {
 	return bufToString(&q.sql.B)
 }
 
-// SQL method is an alias of String
-func (q *Stmt) SQL() string {
-	return q.String()
-}
+/*
+Args returns the list of arguments to be passed to
+database driver for statement execution.
 
-// Args returns the list of arguments to be passed to
-// database driver for statement execution.
+Do not access a slice returned by this method after Stmt is closed.
+
+An array, a returned slice points to, can be altered by any method that
+adds a clause or an expression with arguments.
+
+Make sure to make a copy of the returned slice if you need to preserve it.
+*/
 func (q *Stmt) Args() []interface{} {
 	return q.args
 }
 
-// Dest returns a list of value pointers passed via To method calls.
-// The order matches the constructed SQL statement.
+/*
+Dest returns a list of value pointers passed via To method calls.
+The order matches the constructed SQL statement.
+
+Do not access a slice returned by this method after Stmt is closed.
+
+Note that an array, a returned slice points to, can be altered by `To` method
+calls.
+
+Make sure to make a copy if you need to preserve a slice returned by this method.
+*/
 func (q *Stmt) Dest() []interface{} {
 	return q.dest
 }
 
-// Invalidate forces a rebuild on next query execution
+/*
+Invalidate forces a rebuild on next query execution.
+
+Most likely you don't need to call this method directly.
+*/
 func (q *Stmt) Invalidate() {
 	if q.sql != nil {
 		putBuffer(q.sql)
@@ -426,22 +443,33 @@ func (q *Stmt) Invalidate() {
 }
 
 /*
-Close can be used to reuse memory allocated for SQL statement builder instances:
-
-	var (
-		field1 int
-		field2 string
-	)
-	q := sqlf.From("table").
-		Select("field1").To(&field1).
-		Select("field2").To(&field2)
-	err := QueryRow(nil, db)
-	q.Close()
+Close puts buffers and other objects allocated to build an SQL statement
+back to pool for reuse by other Stmt instances.
 
 Stmt instance should not be used after Close method call.
 */
 func (q *Stmt) Close() {
 	reuseStmt(q)
+}
+
+// Clone creates a copy of the statement.
+func (q *Stmt) Clone() *Stmt {
+	stmt := getStmt(q.dialect)
+	if cap(stmt.chunks) < len(q.chunks) {
+		stmt.chunks = make(stmtChunks, len(q.chunks), len(q.chunks)+2)
+		copy(stmt.chunks, q.chunks)
+	} else {
+		stmt.chunks = append(stmt.chunks, q.chunks...)
+	}
+	stmt.args = insertAt(stmt.args, q.args, 0)
+	stmt.dest = insertAt(stmt.dest, q.dest, 0)
+	stmt.buf.Write(q.buf.B)
+	if q.sql != nil {
+		stmt.sql = getBuffer()
+		stmt.sql.Write(q.sql.B)
+	}
+
+	return stmt
 }
 
 // addChunk adds a clause or expression to a statement.
@@ -522,17 +550,23 @@ loop:
 }
 
 // clause adds a clause at given pos unless there is one.
-// Returns a chunk index.
+// Returns the index of a last clause chunk.
 func (q *Stmt) clause(pos int, expr string, args ...interface{}) (index int) {
 	// Save pos for Expr calls
 	q.pos = pos
-	// See if clause was already added.
+	// See if the clause was already added.
 loop:
 	for i := len(q.chunks) - 1; i >= 0; i-- {
 		chunk := &q.chunks[i]
 		switch {
 		case chunk.pos == pos:
-			// FIXME: Return the first clause chunk index (at the moment it returns the last expression)
+			// Return the first clause chunk index
+			for j := i - 1; j >= 0; j-- {
+				chunk := &q.chunks[j]
+				if chunk.pos < pos {
+					return j + 1
+				}
+			}
 			return i
 		case chunk.pos < pos:
 			break loop

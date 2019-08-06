@@ -89,11 +89,11 @@ func forEveryDB(t *testing.T, test func(ctx context.Context, env *dbEnv)) {
 			// Create schema
 			err := execScript(env.db, sqlSchemaCreate)
 			if err != nil {
-				t.Errorf("Failed to create %s schema: %v", env.driver, err)
+				t.Errorf("Failed to create a %s schema: %v", env.driver, err)
 			} else {
 				err = execScript(env.db, sqlFillDb)
 				if err != nil {
-					t.Errorf("Failed to populate %s database: %v", env.driver, err)
+					t.Errorf("Failed to populate a %s database: %v", env.driver, err)
 				} else {
 					// Execute a test
 					test(ctx, env)
@@ -101,7 +101,7 @@ func forEveryDB(t *testing.T, test func(ctx context.Context, env *dbEnv)) {
 			}
 			err = execScript(env.db, sqlSchemaDrop)
 			if err != nil {
-				t.Errorf("Failed to drop %s schema: %v", env.driver, err)
+				t.Errorf("Failed to drop a %s schema: %v", env.driver, err)
 			}
 		}
 	}
@@ -110,14 +110,25 @@ func forEveryDB(t *testing.T, test func(ctx context.Context, env *dbEnv)) {
 func TestQueryRow(t *testing.T) {
 	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
 		var name string
-		q := env.sqlf.From("users").Select("name").To(&name).Where("id = ?", 1)
+		q := env.sqlf.From("users").
+			Select("name").To(&name).
+			Where("id = ?", 1)
 		err := q.QueryRow(ctx, env.db)
 		q.Close()
-		if err != nil {
-			t.Errorf("Failed to execute a query: %v", err)
-		} else {
-			assert.Equal(t, "User 1", name)
-		}
+		assert.NoError(t, err, "Failed to execute a query: %v", err)
+		assert.Equal(t, "User 1", name)
+	})
+}
+
+func TestQueryRowAndClose(t *testing.T) {
+	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
+		var name string
+		err := env.sqlf.From("users").
+			Select("name").To(&name).
+			Where("id = ?", 1).
+			QueryRowAndClose(ctx, env.db)
+		assert.NoError(t, err, "Failed to execute a query: %v", err)
+		assert.Equal(t, "User 1", name)
 	})
 }
 
@@ -133,18 +144,18 @@ func TestExec(t *testing.T) {
 		defer q.Close()
 
 		q.QueryRow(ctx, env.db)
+
 		assert.Equal(t, 3, count)
 
-		q2 := env.sqlf.DeleteFrom("users").Where("id = ?", userId)
-		_, err := q2.Exec(ctx, env.db)
-		q2.Close()
-		if err != nil {
-			t.Errorf("Failed to delete a row. %s error: %v", env.driver, err)
-		}
+		_, err := env.sqlf.DeleteFrom("users").
+			Where("id = ?", userId).
+			ExecAndClose(ctx, env.db)
+		assert.NoError(t, err, "Failed to delete a row. %s error: %v", env.driver, err)
 
 		// Re-check the number of remaining rows
 		count = 0
 		q.QueryRow(ctx, env.db)
+
 		assert.Equal(t, 2, count)
 	})
 }
@@ -158,9 +169,9 @@ func TestQuery(t *testing.T) {
 			amount   float64
 		)
 		q := env.sqlf.
-			From("incomes, users ut, users uf").
-			Where("ut.id = user_id").
-			Where("uf.id = from_user_id").
+			From("incomes").
+			From("users ut").Where("ut.id = user_id").
+			From("users uf").Where("uf.id = from_user_id").
 			Select("ut.name").To(&userTo).
 			Select("uf.name").To(&userFrom).
 			Select("sum(amount) as got").To(&amount).
@@ -190,6 +201,29 @@ func TestQuery(t *testing.T) {
 				assert.Equal(t, 500.0, amount)
 			}
 		}
+	})
+}
+
+func TestQueryAndClose(t *testing.T) {
+	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
+		var (
+			nRows  int     = 0
+			total  float64 = 0.0
+			amount float64
+		)
+		err := env.sqlf.
+			From("incomes").
+			Select("sum(amount) as got").To(&amount).
+			GroupBy("user_id, from_user_id").
+			OrderBy("got DESC").
+			QueryAndClose(ctx, env.db, func(rows *sql.Rows) {
+				nRows++
+				total += amount
+			})
+
+		assert.NoError(t, err, "Failed to execute a query. %s error: %v", env.driver, err)
+		assert.Equal(t, 4, nRows)
+		assert.Equal(t, 1550.0, total)
 	})
 }
 

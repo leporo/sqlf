@@ -30,7 +30,7 @@ func TestBasicSelect(t *testing.T) {
 func TestMixedOrder(t *testing.T) {
 	q := sqlf.Select("id").Where("id > ?", 42).From("table").Where("id < ?", 1000)
 	defer q.Close()
-	sql, args := q.SQL(), q.Args()
+	sql, args := q.String(), q.Args()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? AND id < ?", sql)
 	assert.Equal(t, []interface{}{42, 1000}, args)
 }
@@ -38,7 +38,7 @@ func TestMixedOrder(t *testing.T) {
 func TestClause(t *testing.T) {
 	q := sqlf.Select("id").From("table").Where("id > ?", 42).Clause("FETCH NEXT").Clause("FOR UPDATE")
 	defer q.Close()
-	sql, args := q.SQL(), q.Args()
+	sql, args := q.String(), q.Args()
 	assert.Equal(t, "SELECT id FROM table WHERE id > ? FETCH NEXT FOR UPDATE", sql)
 	assert.Equal(t, []interface{}{42}, args)
 }
@@ -52,7 +52,7 @@ func TestManyFields(t *testing.T) {
 	for _, field := range []string{"uno", "dos", "tres"} {
 		q.Select(field)
 	}
-	sql, args := q.SQL(), q.Args()
+	sql, args := q.String(), q.Args()
 	assert.Equal(t, "SELECT id, (id + ?) as id_1, (id + ?) as id_2, (id + ?) as id_3, uno, dos, tres FROM table WHERE id = ?", sql)
 	assert.Equal(t, []interface{}{10, 20, 30, 42}, args)
 }
@@ -63,7 +63,7 @@ func TestEvenMoreFields(t *testing.T) {
 	for n := 1; n <= 50; n++ {
 		q.Select(fmt.Sprintf("field_%d", n))
 	}
-	sql, args := q.SQL(), q.Args()
+	sql, args := q.String(), q.Args()
 	assert.Equal(t, 0, len(args))
 	for n := 1; n <= 50; n++ {
 		field := fmt.Sprintf(", field_%d", n)
@@ -77,7 +77,7 @@ func TestPgPlaceholders(t *testing.T) {
 		Where("time > ?", time.Now().Add(time.Hour*-24*14)).
 		Where("(time < ?)", time.Now().Add(time.Hour*-24*7))
 	defer q.Close()
-	sql, _ := q.SQL(), q.Args()
+	sql, _ := q.String(), q.Args()
 	assert.Equal(t, "SELECT id FROM series WHERE time > $1 AND (time < $2)", sql)
 }
 
@@ -87,7 +87,7 @@ func TestPgPlaceholderEscape(t *testing.T) {
 		Where("time \\?> ? + 1", time.Now().Add(time.Hour*-24*14)).
 		Where("time < ?", time.Now().Add(time.Hour*-24*7))
 	defer q.Close()
-	sql, _ := q.SQL(), q.Args()
+	sql, _ := q.String(), q.Args()
 	assert.Equal(t, "SELECT id FROM series WHERE time ?> $1 + 1 AND time < $2", sql)
 }
 
@@ -117,7 +117,7 @@ func TestManyClauses(t *testing.T) {
 		Limit(5).
 		Clause("NO LOCK")
 	defer q.Close()
-	sql, args := q.SQL(), q.Args()
+	sql, args := q.String(), q.Args()
 
 	assert.Equal(t, "SELECT field FROM table WHERE id > ? UNO DOS TRES QUATRO LIMIT ? OFFSET ? NO LOCK", sql)
 	assert.Equal(t, []interface{}{2, 5, 10}, args)
@@ -136,4 +136,66 @@ func TestWithRecursive(t *testing.T) {
 	defer q.Close()
 
 	assert.Equal(t, "WITH RECURSIVE regional_sales AS (SELECT region, SUM(amount) AS total_sales FROM orders GROUP BY region), top_regions AS (SELECT region FROM regional_sales ORDER BY total_sales DESC LIMIT ?) SELECT region, product, SUM(quantity) AS product_units, SUM(amount) AS product_sales FROM orders WHERE region IN (SELECT region FROM top_regions) GROUP BY region, product", q.String())
+}
+
+func TestSubQueryDialect(t *testing.T) {
+	q := sqlf.PostgreSQL.From("users u").
+		Select("email").
+		Where("registered > ?", "2019-01-01").
+		SubQuery("EXISTS (", ")",
+			sqlf.PostgreSQL.From("orders").
+				Select("id").
+				Where("user_id = u.id").
+				Where("amount > ?", 100))
+	defer q.Close()
+
+	// Parameter placeholder numbering should match the arguments
+	assert.Equal(t, "SELECT email FROM users u WHERE registered > $1 AND EXISTS (SELECT id FROM orders WHERE user_id = u.id AND amount > $2)", q.String())
+	assert.Equal(t, []interface{}{"2019-01-01", 100}, q.Args())
+}
+
+func TestClone(t *testing.T) {
+	var (
+		value  string
+		value2 string
+	)
+	q := sqlf.From("table").Select("field").To(&value).Where("id = ?", 42)
+	defer q.Close()
+
+	assert.Equal(t, "SELECT field FROM table WHERE id = ?", q.String())
+
+	q2 := q.Clone()
+	defer q2.Close()
+
+	assert.Equal(t, q.Args(), q2.Args())
+	assert.Equal(t, q.Dest(), q2.Dest())
+	assert.Equal(t, q.String(), q2.String())
+
+	q2.Where("time < ?", time.Now())
+
+	assert.Equal(t, q.Dest(), q2.Dest())
+	assert.NotEqual(t, q.Args(), q2.Args())
+	assert.NotEqual(t, q.String(), q2.String())
+
+	q2.Select("field2").To(&value2)
+	assert.NotEqual(t, q.Dest(), q2.Dest())
+	assert.NotEqual(t, q.Args(), q2.Args())
+	assert.NotEqual(t, q.String(), q2.String())
+
+	// Add more clauses to original statement to re-allocate chunks array
+	q.With("top_users", sqlf.From("users").OrderBy("rating DESCT").Limit(10)).
+		GroupBy("id").
+		Having("field > ?", 10).
+		Paginate(1, 20).
+		Clause("FETCH ROWS ONLY").
+		Clause("FOR UPDATE")
+
+	q3 := q.Clone()
+	assert.Equal(t, q.Args(), q3.Args())
+	assert.Equal(t, q.Dest(), q3.Dest())
+	assert.Equal(t, q.String(), q3.String())
+
+	assert.NotEqual(t, q.Dest(), q2.Dest())
+	assert.NotEqual(t, q.Args(), q2.Args())
+	assert.NotEqual(t, q.String(), q2.String())
 }

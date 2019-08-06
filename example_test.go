@@ -1,10 +1,62 @@
 package sqlf_test
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/leporo/sqlf"
 )
+
+type dummyDB int
+
+func (db *dummyDB) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return nil, nil
+}
+
+func (db *dummyDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return nil, nil
+}
+
+func (db *dummyDB) QueryRow(query string, args ...interface{}) *sql.Row {
+	return nil
+}
+
+var db = new(dummyDB)
+var ctx = context.Background()
+
+// syntax check only
+func Example() {
+	var (
+		region       string
+		product      string
+		productUnits int
+		productSales float64
+	)
+
+	err := sqlf.From("orders").
+		With("regional_sales",
+			sqlf.From("orders").
+				Select("region, SUM(amount) AS total_sales").
+				GroupBy("region")).
+		With("top_regions",
+			sqlf.From("regional_sales").
+				Select("region").
+				Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
+		Select("region").To(&region).
+		Select("product").To(&product).
+		Select("SUM(quantity)").To(&productUnits).
+		Select("SUM(amount) AS product_sales").To(&productSales).
+		Where("region IN (SELECT region FROM top_regions)").
+		GroupBy("region, product").
+		OrderBy("product_sales DESC").
+		QueryAndClose(ctx, db, func(row *sql.Rows) {
+			fmt.Printf("%s\t%s\t%d\t$%.2f", region, product, productUnits, productSales)
+		})
+	if err != nil {
+		panic(err)
+	}
+}
 
 func ExampleStmt_OrderBy() {
 	q := sqlf.Select("id").From("table").OrderBy("id", "name DESC")
@@ -138,8 +190,14 @@ func ExampleSetDialect() {
 
 func ExampleStmt_With() {
 	q := sqlf.From("orders").
-		With("regional_sales", sqlf.From("orders").Select("region, SUM(amount) AS total_sales").GroupBy("region")).
-		With("top_regions", sqlf.From("regional_sales").Select("region").Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
+		With("regional_sales",
+			sqlf.From("orders").
+				Select("region, SUM(amount) AS total_sales").
+				GroupBy("region")).
+		With("top_regions",
+			sqlf.From("regional_sales").
+				Select("region").
+				Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
 		Select("region").
 		Select("product").
 		Select("SUM(quantity) AS product_units").
@@ -150,4 +208,57 @@ func ExampleStmt_With() {
 	q.Close()
 	// Output:
 	// WITH regional_sales AS (SELECT region, SUM(amount) AS total_sales FROM orders GROUP BY region), top_regions AS (SELECT region FROM regional_sales WHERE total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)) SELECT region, product, SUM(quantity) AS product_units, SUM(amount) AS product_sales FROM orders WHERE region IN (SELECT region FROM top_regions) GROUP BY region, product
+}
+
+func ExampleStmt_SubQuery() {
+	q := sqlf.From("orders o").
+		Select("date, region").
+		SubQuery("(", ") AS prev_order_date",
+			sqlf.From("orders po").
+				Select("date").
+				Where("region = o.region").
+				Where("id < o.id").
+				OrderBy("id DESC").
+				Clause("LIMIT 1")).
+		Where("date > CURRENT_DATE - interval '1 day'").
+		OrderBy("id DESC")
+	fmt.Println(q.String())
+	q.Close()
+
+	// Output:
+	// SELECT date, region, (SELECT date FROM orders po WHERE region = o.region AND id < o.id ORDER BY id DESC LIMIT 1) AS prev_order_date FROM orders o WHERE date > CURRENT_DATE - interval '1 day' ORDER BY id DESC
+}
+
+func ExampleStmt_Clause() {
+	q := sqlf.From("empsalary").
+		Select("sum(salary) OVER w").
+		Clause("WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)")
+	fmt.Println(q.String())
+	q.Close()
+
+	// Output:
+	// SELECT sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
+}
+
+// syntax check only
+func ExampleStmt_QueryRowAndClose() {
+	type Offer struct {
+		id        int64
+		productId int64
+		price     float64
+		isDeleted bool
+	}
+
+	var o Offer
+
+	err := sqlf.From("offers").
+		Select("id").To(&o.id).
+		Select("product_id").To(&o.productId).
+		Select("price").To(&o.price).
+		Select("is_deleted").To(&o.isDeleted).
+		Where("id = ?", 42).
+		QueryRowAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 }

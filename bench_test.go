@@ -203,8 +203,14 @@ func BenchmarkSelectSubqueryPostgreSQL(b *testing.B) {
 func BenchmarkWith(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		q := sqlf.From("orders").
-			With("regional_sales", sqlf.From("orders").Select("region, SUM(amount) AS total_sales").GroupBy("region")).
-			With("top_regions", sqlf.From("regional_sales").Select("region").Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
+			With("regional_sales",
+				sqlf.From("orders").
+					Select("region, SUM(amount) AS total_sales").
+					GroupBy("region")).
+			With("top_regions",
+				sqlf.From("regional_sales").
+					Select("region").
+					Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
 			Select("region").
 			Select("product").
 			Select("SUM(quantity) AS product_units").

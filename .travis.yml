@@ -2,5 +2,6 @@ language: go
 
 go:
   - 1.11
-  - 1.12
+  # Enable when 1.13 is out
+  # - 1.12
   - master

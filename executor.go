@@ -5,14 +5,18 @@ import (
 	"database/sql"
 )
 
-// Executor can perform SQL queries.
+// Executor performs SQL queries.
+// It's an interface accepted by Query, QueryRow and Exec methods.
+// Both sql.DB, sql.Conn and sql.Tx can be passed as executor.
 type Executor interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 }
 
-// ContextExecutor can perform SQL queries with context
+// ContextExecutor performs SQL queries with context.
+// It's an interface accepted by Query, QueryRow and Exec methods.
+// Both sql.DB, sql.Conn and sql.Tx can be passed as context executor.
 type ContextExecutor interface {
 	Executor
 
@@ -21,7 +25,7 @@ type ContextExecutor interface {
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-// Query builds and executes the statement.
+// Query executes the statement.
 // For every row of a returned dataset it calls a handler function.
 // If scan targets were set via To method calls, Query method automatically
 // executes rows.Scan right before calling a handler function.
@@ -67,7 +71,15 @@ func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Ro
 	return rows.Err()
 }
 
-// QueryRow builds, executes the statement via Executor methods
+// QueryAndClose executes the statement and releases all the resources that
+// can be reused to a pool. Do not call any Stmt methods after this call.
+func (q *Stmt) QueryAndClose(ctx context.Context, db Executor, handler func(rows *sql.Rows)) error {
+	err := q.Query(ctx, db, handler)
+	q.Close()
+	return err
+}
+
+// QueryRow executes the statement via Executor methods
 // and scans values to variables bound via To method calls.
 func (q *Stmt) QueryRow(ctx context.Context, db Executor) error {
 	var row *sql.Row
@@ -80,11 +92,33 @@ func (q *Stmt) QueryRow(ctx context.Context, db Executor) error {
 	return row.Scan(q.dest...)
 }
 
-// Exec builds and executes the statement
+// QueryRowAndClose executes the statement via Executor methods
+// and scans values to variables bound via To method calls.
+// All the objects allocated by query builder are moved to a pool
+// to be reused.
+//
+// Do not call any Stmt methods after this call.
+func (q *Stmt) QueryRowAndClose(ctx context.Context, db Executor) error {
+	err := q.QueryRow(ctx, db)
+	q.Close()
+	return err
+}
+
+// Exec executes the statement.
 func (q *Stmt) Exec(ctx context.Context, db Executor) (sql.Result, error) {
 	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
 		return ctxExecutor.ExecContext(ctx, q.String(), q.args...)
 	}
 
 	return db.Exec(q.String(), q.args...)
+}
+
+// ExecAndClose executes the statement and releases all the objects
+// and buffers allocated by statement builder back to a pool.
+//
+// Do not call any Stmt methods after this call.
+func (q *Stmt) ExecAndClose(ctx context.Context, db Executor) (sql.Result, error) {
+	res, err := q.Exec(ctx, db)
+	q.Close()
+	return res, err
 }
