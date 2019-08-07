@@ -25,7 +25,6 @@ func (db *dummyDB) QueryRow(query string, args ...interface{}) *sql.Row {
 var db = new(dummyDB)
 var ctx = context.Background()
 
-// syntax check only
 func Example() {
 	var (
 		region       string
@@ -182,12 +181,6 @@ func ExamplePostgreSQL() {
 	// SELECT field FROM table WHERE id = $1
 }
 
-func ExampleSetDialect() {
-	sqlf.SetDialect(sqlf.PostgreSQL)
-	// ...
-	sqlf.SetDialect(sqlf.NoDialect)
-}
-
 func ExampleStmt_With() {
 	q := sqlf.From("orders").
 		With("regional_sales",
@@ -240,7 +233,6 @@ func ExampleStmt_Clause() {
 	// SELECT sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
 }
 
-// syntax check only
 func ExampleStmt_QueryRowAndClose() {
 	type Offer struct {
 		id        int64

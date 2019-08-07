@@ -244,25 +244,18 @@ Use `SubQuery` method to add a sub query to a statement:
 		OrderBy("id DESC")
 	fmt.Println(q.String())
 	q.Close()
-
-	// Output:
-	// SELECT
-    //   date,
-    //   region,
-    //   (SELECT date FROM orders po WHERE region = o.region AND id < o.id ORDER BY id DESC LIMIT 1) AS prev_order_date
-    // FROM orders o
-    // WHERE date > CURRENT_DATE - interval '1 day'
-    // ORDER BY id DESC
 ```
 
-Not that if a subquery uses no arguments like it's more effective to add it as SQL fragment:
+Not that if a subquery uses no arguments, it's more effective to add it as SQL fragment:
 
 ```go
 	q := sqlf.From("orders o").
 		Select("date, region").
 		Where("date > CURRENT_DATE - interval '1 day'").
         Where("exists (SELECT 1 FROM orders po WHERE region = o.region AND id < o.id ORDER BY id DESC LIMIT 1)").
-		OrderBy("id DESC")
+        OrderBy("id DESC")
+    // ...
+    q.Close()
 ```
 
 ### INSERT

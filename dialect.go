@@ -8,28 +8,31 @@ import (
 )
 
 // Dialect defines the method SQL statement is to be built.
+//
+// NoDialect is a default statement builder mode.
+// No SQL fragments will be altered.
+// PostgreSQL mode can be set for a statement:
+//
+//     q := sqlf.PostgreSQL.From("table").Select("field")
+//     ...
+//     q.Close()
+//
+// or as default mode:
+//
+//     sqlf.SetDialect(sqlf.PostgreSQL)
+//	   ...
+//     q := sqlf.From("table").Select("field")
+//     q.Close()
+//
+// Wher PostgreSQL mode is activated, ? placeholders are
+// replaced with numbered positional arguments like $1, $2...
 type Dialect uint32
 
 const (
 	// NoDialect is a default statement builder mode.
-	// No SQL fragments will be altered.
 	NoDialect Dialect = iota
-	// PostgreSQL mode can be set for a statement:
-	//
-	//     q := sqlf.PostgreSQL.From("table").Select("field")
-	//     ...
-	//     q.Close()
-	//
-	// or as default mode:
-	//
-	//     sqlf.SetDialect(sqlf.PostgreSQL)
-	//	   ...
-	//     q := sqlf.From("table").Select("field")
-	//     q.Close()
-	//
-	// Wher PostgreSQL mode is activated, ? placeholders are
-	// replaced with numbered positional arguments like $1, $2...
-	PostgreSQL Dialect = iota
+	// PostgreSQL mode is to be used to automatically replace ? placeholders with $1, $2...
+	PostgreSQL
 )
 
 var defaultDialect = NoDialect
@@ -37,9 +40,9 @@ var defaultDialect = NoDialect
 /*
 SetDialect selects a Dialect to be used by default.
 
-Dialect can be one of sqlf.NoDialect() and sqlf.PostgreSQL()
+Dialect can be one of sqlf.NoDialect or sqlf.PostgreSQL
 
-	sqlf.SetDialect(sqlf.PostgreSQL())
+	sqlf.SetDialect(sqlf.PostgreSQL)
 */
 func SetDialect(dialect Dialect) {
 	atomic.StoreUint32((*uint32)(&defaultDialect), uint32(dialect))
@@ -49,7 +52,7 @@ func SetDialect(dialect Dialect) {
 New starts an SQL statement with an arbitrary verb.
 
 Use From, Select, InsertInto or DeleteFrom methods to create
-an instance of an SQL statement builder for common cases.
+an instance of an SQL statement builder for common statements.
 */
 func (b Dialect) New(verb string, args ...interface{}) *Stmt {
 	q := getStmt(b)

@@ -9,22 +9,54 @@ import (
 /*
 New initializes a SQL statement builder instance with an arbitrary verb.
 
-Use sqlf.Select(), sqlf.Insert(), sqlf.Delete() to create
-an instance of a SQL statement builder for common cases.
+Use sqlf.Select(), sqlf.InsertInto(), sqlf.DeleteFrom() to start
+common SQL statements.
+
+Use New for special cases like this:
+
+	q := sqlf.New("TRANCATE")
+	for _, table := range tableNames {
+		q.Expr(table)
+	}
+	q.Clause("RESTART IDENTITY")
+	err := q.ExecAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 */
 func New(verb string, args ...interface{}) *Stmt {
 	return defaultDialect.New(verb, args...)
 }
 
 /*
-From creates a SELECT statement builder.
+From starts a SELECT statement.
+
+	var cnt int64
+
+	err := sqlf.From("table").
+		Select("COUNT(*)").To(&cnt)
+		Where("value >= ?", 42).
+		QueryRowAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 */
 func From(expr string, args ...interface{}) *Stmt {
 	return defaultDialect.From(expr, args...)
 }
 
 /*
-Select creates a SELECT statement builder.
+Select starts a SELECT statement.
+
+	var cnt int64
+
+	err := sqlf.Select("COUNT(*)").To(&cnt).
+		From("table").
+		Where("value >= ?", 42).
+		QueryRowAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 
 Note that From method can also be used to start a SELECT statement.
 */
@@ -33,21 +65,40 @@ func Select(expr string, args ...interface{}) *Stmt {
 }
 
 /*
-Update creates an UPDATE statement builder.
+Update starts an UPDATE statement.
+
+	err := sqlf.Update("table").
+		Set("field1", "newvalue").
+		Where("id = ?", 42).
+		ExecAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 */
 func Update(tableName string) *Stmt {
 	return defaultDialect.Update(tableName)
 }
 
 /*
-InsertInto creates an INSERT statement builder.
+InsertInto starts an INSERT statement.
+
+	var newId int64
+	err := sqlf.InsertInto("table").
+		Set("field", value).
+		Returning("id").To(&newId).
+		ExecAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 */
 func InsertInto(tableName string) *Stmt {
 	return defaultDialect.InsertInto(tableName)
 }
 
 /*
-DeleteFrom creates a DELETE statement builder.
+DeleteFrom starts a DELETE statement.
+
+	err := sqlf.DeleteFrom("table").Where("id = ?", id).ExecAndClose(ctx, db)
 */
 func DeleteFrom(tableName string) *Stmt {
 	return defaultDialect.DeleteFrom(tableName)
@@ -69,18 +120,20 @@ Use one of the following methods to create a SQL statement builder instance:
 
 	sqlf.From("table")
 	sqlf.Select("field")
-    sqlf.InsertInto("table")
+	sqlf.InsertInto("table")
 	sqlf.Update("table")
-    sqlf.DeleteFrom("table")
+	sqlf.DeleteFrom("table")
 
-For an arbitrary SQL statement use New:
+For other SQL statements use New:
 
-    q := sqlf.New("TRUNCATE")
-    for _, table := range tablesToBeEmptied {
-        q.Expr(table)
-    }
-	err := q.ExecContext(r.Context(), db)
-	q.Close()
+	q := sqlf.New("TRUNCATE")
+	for _, table := range tablesToBeEmptied {
+		q.Expr(table)
+	}
+	err := q.ExecAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
 */
 type Stmt struct {
 	dialect Dialect
@@ -96,7 +149,7 @@ type Stmt struct {
 Select adds a SELECT clause to a statement and/or appends
 an expression that defines columns of a resulting data set.
 
-	q := sqlf.Select("field1, field2").From("table")
+	q := sqlf.Select("DISTINCT field1, field2").From("table")
 
 Select can be called multiple times to add more columns:
 
@@ -107,8 +160,22 @@ Select can be called multiple times to add more columns:
 	// ...
 	q.Close()
 
-Note that a SELECT statement can also be started by a From method call.
+Use To method to bind variables to selected columns:
 
+	var (
+		num  int
+		name string
+	)
+
+	res := sqlf.From("table").
+		Select("num, name").To(&num, &name).
+		Where("id = ?", 42).
+		QueryRowAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
+
+Note that a SELECT statement can also be started by a From method call.
 */
 func (q *Stmt) Select(expr string, args ...interface{}) *Stmt {
 	q.clause(posSelect, "SELECT")
@@ -135,8 +202,7 @@ Query and QueryRow methods.
 	}
 
 To method MUST be called immediately after Select, Returning or other
-method that defines data to be returned. This will help to maintain the
-proper order of value pointers passed to Scan.
+method that defines data to be returned.
 */
 func (q *Stmt) To(dest ...interface{}) *Stmt {
 	if len(dest) > 0 {
@@ -194,7 +260,9 @@ func (q *Stmt) DeleteFrom(tableName string) *Stmt {
 
 /*
 Set method:
+
 - Adds a column to the list of columns and a value to VALUES clause of INSERT statement,
+
 - Adds an item to SET clause of an UPDATE statement.
 
 	q.Set("field", 32)
@@ -421,7 +489,7 @@ The order matches the constructed SQL statement.
 
 Do not access a slice returned by this method after Stmt is closed.
 
-Note that an array, a returned slice points to, can be altered by `To` method
+Note that an array, a returned slice points to, can be altered by To method
 calls.
 
 Make sure to make a copy if you need to preserve a slice returned by this method.
