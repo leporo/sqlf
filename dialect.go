@@ -56,7 +56,7 @@ an instance of an SQL statement builder for common statements.
 */
 func (b Dialect) New(verb string, args ...interface{}) *Stmt {
 	q := getStmt(b)
-	q.clause(posSelect, verb, args...)
+	q.addChunk(posSelect, verb, "", args, ", ")
 	return q
 }
 

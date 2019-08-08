@@ -43,6 +43,16 @@ func TestClause(t *testing.T) {
 	assert.Equal(t, []interface{}{42}, args)
 }
 
+func TestExpr(t *testing.T) {
+	q := sqlf.From("table").
+		Select("id").
+		Expr("(select 1 from related where table_id = table.id limit 1) AS has_related").
+		Where("id > ?", 42)
+	assert.Equal(t, "SELECT id, (select 1 from related where table_id = table.id limit 1) AS has_related FROM table WHERE id > ?", q.String())
+	assert.Equal(t, []interface{}{42}, q.Args())
+	q.Close()
+}
+
 func TestManyFields(t *testing.T) {
 	q := sqlf.Select("id").From("table").Where("id = ?", 42)
 	defer q.Close()

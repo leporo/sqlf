@@ -263,14 +263,16 @@ Not that if a subquery uses no arguments, it's more effective to add it as SQL f
 A simple INSERT statement execution using the `database/sql` standard library may look like this:
 
 ```go
-_, err := db.ExecContext(ctx, "INSERT INTO users (email, address) VALUES ($1, $2)", "new@email.com", "320 Some Avenue, Somewhereville, GA, US")
+var userId int64
+
+err := db.ExecContext(ctx, "INSERT INTO users (email, address) VALUES ($1, $2) RETURNING id ON CONFLICT (email) DO UPDATE SET address = users.address", "new@email.com", "320 Some Avenue, Somewhereville, GA, US").Scan(&userId)
 ```
 
-There are just 2 fields of a new database record to be populated, and yet it takes some time to figure out what those fields are and what values are to be assigned to them.
+There are just 2 fields of a new database record to be populated, and yet it takes some time to figure out what columns are being updated and what values are to be assigned to them.
 
-In real-world cases there are tens of fields. On any update both the list of field names and the list of values, passed to `ExecContext` method, have to to be reviewed and updated. It's a common thing to have values misplaced or shuffle the list of fields.
+In real-world cases there are tens of fields. On any update both the list of field names and the list of values, passed to `ExecContext` method, have to to be reviewed and updated. It's a common thing to have values misplaced.
 
-`sqlf` provides a `Set` method to be used both for UPDATE and INSERT statements. It helps to make sure values do match fields:
+`sqlf` provides a `Set` method to be used both for UPDATE and INSERT statements to solve this problem:
 
 ```go
 var userId int64

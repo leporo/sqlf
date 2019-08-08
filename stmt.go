@@ -178,8 +178,8 @@ Use To method to bind variables to selected columns:
 Note that a SELECT statement can also be started by a From method call.
 */
 func (q *Stmt) Select(expr string, args ...interface{}) *Stmt {
-	q.clause(posSelect, "SELECT")
-	return q.Expr(expr, args...)
+	q.addChunk(posSelect, "SELECT", expr, args, ", ")
+	return q
 }
 
 /*
@@ -225,8 +225,8 @@ tableName argument can be a SQL fragment:
 	q.Update("ONLY table AS t")
 */
 func (q *Stmt) Update(tableName string) *Stmt {
-	q.clause(posUpdate, "UPDATE")
-	return q.Expr(tableName)
+	q.addChunk(posUpdate, "UPDATE", tableName, nil, ", ")
+	return q
 }
 
 /*
@@ -239,11 +239,10 @@ tableName argument can be a SQL fragment:
 	q.InsertInto("table AS t")
 */
 func (q *Stmt) InsertInto(tableName string) *Stmt {
-	q.clause(posInsert, "INSERT INTO")
-	q.Expr(tableName)
-	q.clause(posInsertFields-1, "(")
-	q.clause(posValues-1, ") VALUES (")
-	q.clause(posValues+1, ")")
+	q.addChunk(posInsert, "INSERT INTO", tableName, nil, ", ")
+	q.addChunk(posInsertFields-1, "(", "", nil, "")
+	q.addChunk(posValues-1, ") VALUES (", "", nil, "")
+	q.addChunk(posValues+1, ")", "", nil, "")
 	q.pos = posInsertFields
 	return q
 }
@@ -254,8 +253,8 @@ DeleteFrom adds DELETE clause to a statement.
 	q.DeleteFrom("table").Where("id = ?", id)
 */
 func (q *Stmt) DeleteFrom(tableName string) *Stmt {
-	q.clause(posDelete, "DELETE FROM")
-	return q.Expr(tableName)
+	q.addChunk(posDelete, "DELETE FROM", tableName, nil, ", ")
+	return q
 }
 
 /*
@@ -298,19 +297,18 @@ func (q *Stmt) SetExpr(field, expr string, args ...interface{}) *Stmt {
 
 	switch p {
 	case posInsert:
-		q.addChunk(posInsertFields, field, nil, ", ")
-		q.addChunk(posValues, expr, args, ", ")
+		q.addChunk(posInsertFields, "", field, nil, ", ")
+		q.addChunk(posValues, "", expr, args, ", ")
 	case posUpdate:
-		q.clause(posSet, "SET")
-		q.Expr(field+"="+expr, args...)
+		q.addChunk(posSet, "SET", field+"="+expr, args, ", ")
 	}
 	return q
 }
 
 // From adds a FROM clause to statement.
 func (q *Stmt) From(expr string, args ...interface{}) *Stmt {
-	q.clause(posFrom, "FROM")
-	return q.Expr(expr, args...)
+	q.addChunk(posFrom, "FROM", expr, args, ", ")
+	return q
 }
 
 /*
@@ -320,41 +318,37 @@ Where adds a filter:
 
 */
 func (q *Stmt) Where(expr string, args ...interface{}) *Stmt {
-	q.clause(posWhere, "WHERE")
-	q.addChunk(q.pos, expr, args, " AND ")
+	q.addChunk(posWhere, "WHERE", expr, args, " AND ")
 	return q
 }
 
 // OrderBy adds the ORDER BY clause to SELECT statement
 func (q *Stmt) OrderBy(expr ...string) *Stmt {
-	q.clause(posOrderBy, "ORDER BY")
-	q.addChunk(q.pos, strings.Join(expr, ", "), nil, ", ")
+	q.addChunk(posOrderBy, "ORDER BY", strings.Join(expr, ", "), nil, ", ")
 	return q
 }
 
 // GroupBy adds the GROUP BY clause to SELECT statement
 func (q *Stmt) GroupBy(expr string) *Stmt {
-	q.clause(posGroupBy, "GROUP BY")
-	q.addChunk(q.pos, expr, nil, ", ")
+	q.addChunk(posGroupBy, "GROUP BY", expr, nil, ", ")
 	return q
 }
 
 // Having adds the HAVING clause to SELECT statement
 func (q *Stmt) Having(expr string, args ...interface{}) *Stmt {
-	q.clause(posHaving, "HAVING")
-	q.addChunk(q.pos, expr, args, " AND ")
+	q.addChunk(posHaving, "HAVING", expr, args, " AND ")
 	return q
 }
 
 // Limit adds a limit on number of returned rows
 func (q *Stmt) Limit(limit interface{}) *Stmt {
-	q.clause(posLimit, "LIMIT ?", limit)
+	q.addChunk(posLimit, "LIMIT ?", "", []interface{}{limit}, "")
 	return q
 }
 
 // Offset adds a limit on number of returned rows
 func (q *Stmt) Offset(offset interface{}) *Stmt {
-	q.clause(posOffset, "OFFSET ?", offset)
+	q.addChunk(posOffset, "OFFSET ?", "", []interface{}{offset}, "")
 	return q
 }
 
@@ -375,8 +369,7 @@ func (q *Stmt) Paginate(page, pageSize int) *Stmt {
 
 // Returning adds a RETURNING clause to a statement
 func (q *Stmt) Returning(expr string) *Stmt {
-	q.clause(posReturning, "RETURNING")
-	q.addChunk(q.pos, expr, nil, ", ")
+	q.addChunk(posReturning, "RETURNING", expr, nil, ", ")
 	return q
 }
 
@@ -384,7 +377,7 @@ func (q *Stmt) Returning(expr string) *Stmt {
 // With method calls a Close method of a given query, so
 // make sure not to reuse it afterwards.
 func (q *Stmt) With(queryName string, query *Stmt) *Stmt {
-	q.clause(posWith, "WITH")
+	q.addChunk(posWith, "WITH", "", nil, "")
 	return q.SubQuery(queryName+" AS (", ")", query)
 }
 
@@ -394,7 +387,7 @@ Expr appends an expression to the most recently added clause.
 Expressions are separated with commas.
 */
 func (q *Stmt) Expr(expr string, args ...interface{}) *Stmt {
-	q.addChunk(q.pos, expr, args, ", ")
+	q.addChunk(q.pos, "", expr, args, ", ")
 	return q
 }
 
@@ -409,7 +402,7 @@ func (q *Stmt) SubQuery(prefix, suffix string, query *Stmt) *Stmt {
 	if q.pos == posWhere {
 		delimiter = " AND "
 	}
-	index := q.addChunk(q.pos, prefix, query.args, delimiter)
+	index := q.addChunk(q.pos, "", prefix, query.args, delimiter)
 	chunk := &q.chunks[index]
 	// Make sure subquery is not dialect-specific.
 	if query.dialect != NoDialect {
@@ -438,7 +431,7 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 	if len(q.chunks) > 0 {
 		p = (&q.chunks[len(q.chunks)-1]).pos + 10
 	}
-	q.clause(p, expr, args...)
+	q.addChunk(p, expr, "", args, ", ")
 	return q
 }
 
@@ -541,12 +534,17 @@ func (q *Stmt) Clone() *Stmt {
 }
 
 // addChunk adds a clause or expression to a statement.
-func (q *Stmt) addChunk(pos int, expr string, args []interface{}, sep string) (index int) {
+func (q *Stmt) addChunk(pos int, clause, expr string, args []interface{}, sep string) (index int) {
+	// Remember the position
+	q.pos = pos
+
 	argLen := len(args)
 	bufLow := len(q.buf.B)
 	index = len(q.chunks)
 	argTail := 0
+
 	addNew := true
+	addClause := clause != ""
 
 	// Find the position to insert a chunk to
 loop:
@@ -556,6 +554,10 @@ loop:
 		switch {
 		// See if an existing chunk can be extended
 		case chunk.pos == pos:
+			// Do nothing if a clause is already there and no expressions are to be added
+			if expr == "" {
+				return i
+			}
 			// Write a separator
 			if chunk.hasExpr {
 				q.buf.WriteString(sep)
@@ -571,6 +573,8 @@ loop:
 				chunk.bufHigh = len(q.buf.B)
 				chunk.hasExpr = true
 			} else {
+				// Do not add a clause
+				addClause = false
 				index = i + 1
 			}
 			break loop
@@ -585,6 +589,12 @@ loop:
 
 	if addNew {
 		// Insert a new chunk
+		if addClause {
+			q.buf.WriteString(clause)
+			if expr != "" {
+				q.buf.WriteString(" ")
+			}
+		}
 		q.buf.WriteString(expr)
 
 		if cap(q.chunks) == len(q.chunks) {
@@ -598,7 +608,7 @@ loop:
 			bufLow:  bufLow,
 			bufHigh: len(q.buf.B),
 			argLen:  argLen,
-			hasExpr: true,
+			hasExpr: expr != "",
 		}
 
 		q.chunks = append(q.chunks, chunk)
@@ -614,34 +624,6 @@ loop:
 	}
 	q.Invalidate()
 
-	return index
-}
-
-// clause adds a clause at given pos unless there is one.
-// Returns the index of a last clause chunk.
-func (q *Stmt) clause(pos int, expr string, args ...interface{}) (index int) {
-	// Save pos for Expr calls
-	q.pos = pos
-	// See if the clause was already added.
-loop:
-	for i := len(q.chunks) - 1; i >= 0; i-- {
-		chunk := &q.chunks[i]
-		switch {
-		case chunk.pos == pos:
-			// Return the first clause chunk index
-			for j := i - 1; j >= 0; j-- {
-				chunk := &q.chunks[j]
-				if chunk.pos < pos {
-					return j + 1
-				}
-			}
-			return i
-		case chunk.pos < pos:
-			break loop
-		}
-	}
-	index = q.addChunk(pos, expr, args, " ")
-	q.chunks[index].hasExpr = false
 	return index
 }
 
