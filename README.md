@@ -15,43 +15,13 @@ A fast and flexible SQL query builder for Go.
 
 `sqlf.Stmt` has methods to execute a query using any database/sql compatible driver.
 
-It can be used along with `sqlx` or other library.
-
 ## Is It Fast?
 
 It is. See benchmarks: https://github.com/leporo/golang-sql-builder-benchmark
 
 In order to maximize performance and minimize memory footprint, `sqlf` reuses memory allocated for query building. The heavier load is, the faster `sqlf` works.
 
-## Has It to Be Fast?
-
-Any SQL builder or ORM is there for developer's sake. It makes it easier to develop and maintain applications but takes its toll in processing time. It's a trade-off and there are no ultimate answers. Regardless of query builder used, a database query execution takes way more time than query building and processing.
-
-Check it. Test it. It's up to you to decide.
-
 ## Usage
-
-```go
-type Offer struct {
-    id        int64
-    productId int64
-    price     float64
-    isDeleted bool
-}
-
-var o Offer
-
-err := sqlf.From("offers").
-    Select("id").To(&o.id).
-    Select("product_id").To(&o.productId).
-    Select("price").To(&o.price).
-    Select("is_deleted").To(&o.isDeleted).
-    Where("id = ?", 42).
-    QueryRowAndClose(ctx, db)
-if err != nil {
-    panic(err)
-}
-```
 
 Build complex statements:
 
@@ -82,6 +52,30 @@ err := sqlf.From("orders").
     QueryAndClose(ctx, db, func(row *sql.Rows){
         fmt.Printf("%s\t%s\t%d\t$%.2f\n", region, product, productUnits, productSales)
     })
+if err != nil {
+    panic(err)
+}
+```
+
+Bind structures to query results:
+
+```go
+type Offer struct {
+    id        int64
+    productId int64
+    price     float64
+    isDeleted bool
+}
+
+var o Offer
+
+err := sqlf.From("offers").
+    Select("id").To(&o.id).
+    Select("product_id").To(&o.productId).
+    Select("price").To(&o.price).
+    Select("is_deleted").To(&o.isDeleted).
+    Where("id = ?", 42).
+    QueryRowAndClose(ctx, db)
 if err != nil {
     panic(err)
 }
@@ -133,14 +127,6 @@ if err != nil {
 ```
 
 ## SQL Statement Construction and Execution
-
-### Thou Shalt Learn SQL
-
-`sqlf` is a query builder. It's there to help you construct SQL statements and process the returned results. It won't jump in and set an extra level of abstraction between application and database server. You have to use a SQL dialect of your database server.
-
-Good news is you don't need to look for a method to use a specific database server feature, like array fields or full text search. Just use SQL.
-
-`sqlf` allows you to split a complex statement into fragments, manage those fragments and combine it all together before execution. There are methods for most common SQL statement clauses but don't expect it to cover operators or built-in functions like `current_timestamp` or `array_agg()`.
 
 ### SELECT
 
@@ -260,19 +246,7 @@ Not that if a subquery uses no arguments, it's more effective to add it as SQL f
 
 ### INSERT
 
-A simple INSERT statement execution using the `database/sql` standard library may look like this:
-
-```go
-var userId int64
-
-err := db.ExecContext(ctx, "INSERT INTO users (email, address) VALUES ($1, $2) RETURNING id ON CONFLICT (email) DO UPDATE SET address = users.address", "new@email.com", "320 Some Avenue, Somewhereville, GA, US").Scan(&userId)
-```
-
-There are just 2 fields of a new database record to be populated, and yet it takes some time to figure out what columns are being updated and what values are to be assigned to them.
-
-In real-world cases there are tens of fields. On any update both the list of field names and the list of values, passed to `ExecContext` method, have to to be reviewed and updated. It's a common thing to have values misplaced.
-
-`sqlf` provides a `Set` method to be used both for UPDATE and INSERT statements to solve this problem:
+`sqlf` provides a `Set` method to be used both for UPDATE and INSERT statements:
 
 ```go
 var userId int64
@@ -284,6 +258,21 @@ err := sqlf.InsertInto("users").
     Clause("ON CONFLICT (email) DO UPDATE SET address = users.address").
     ExecAndClose(ctx, db)
 ```
+
+The same statement execution using the `database/sql` standard library looks like this:
+
+```go
+var userId int64
+
+// database/sql
+err := db.ExecContext(ctx, "INSERT INTO users (email, address) VALUES ($1, $2) RETURNING id ON CONFLICT (email) DO UPDATE SET address = users.address", "new@email.com", "320 Some Avenue, Somewhereville, GA, US").Scan(&userId)
+```
+
+There are just 2 fields of a new database record to be populated, and yet it takes some time to figure out what columns are being updated and what values are to be assigned to them.
+
+In real-world cases there are tens of fields. On any update both the list of field names and the list of values, passed to `ExecContext` method, have to to be reviewed and updated. It's a common thing to have values misplaced.
+
+The use of `Set` method to maintain a field-value map is a way to solve this issue.
 
 ### UPDATE
 
@@ -300,5 +289,3 @@ err := sqlf.DeleteFrom("products").
     Where("id = ?", 42)
     ExecAndClose(ctx, db)
 ```
-
-`sqlf` doesn't implement any method to populate a structure with matching column values. There is a lot of battle-tested libraries like `sqlx` and `dbr` that do it.
