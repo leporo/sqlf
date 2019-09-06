@@ -221,3 +221,18 @@ func BenchmarkWith(b *testing.B) {
 		q.Close()
 	}
 }
+
+func BenchmarkIn(b *testing.B) {
+	a := make([]interface{}, 50)
+	for i := 0; i < len(a); i++ {
+		a[i] = i + 1
+	}
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		q := sqlf.From("orders").
+			Select("id").
+			Where("status").In(a...)
+		s = q.String()
+		q.Close()
+	}
+}

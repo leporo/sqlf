@@ -161,9 +161,7 @@ fmt.Printf("Most expensive offer: $%.2f\n", minAmount)
 
 #### Joins
 
-There are no helper methods to construct a JOIN clause.
-
-Consider using the "old style" syntax for INNER JOINs:
+There are helper methods to construct a JOIN clause: `Join`, `LeftJoin`, `RightJoin` and `FullJoin`.
 
 ```go
 var (
@@ -177,8 +175,7 @@ err := sqlf.From("offers o").
     Select("price").To(&price).
     Where("is_deleted = false").
     // Join
-    From("products p").
-    Where("p.id = o.product_id").
+    LeftJoin("products p", "p.id = o.product_id").
     // Bind a column from joined table to variable
     Select("p.name").To(&productName).
     // Print top 10 offers
@@ -200,7 +197,7 @@ var (
     name  string
     value string
 )
-err := sqlf.From("t1 FULL JOIN t2 ON t1.num = t2.num AND t2.value IN (?, ?)", "xxx", "yyy").
+err := sqlf.From("t1 CROSS JOIN t2 ON t1.num = t2.num AND t2.value IN (?, ?)", "xxx", "yyy").
     Select("t1.num").To(&num).
     Select("t1.name").To(&name).
     Select("t2.value").To(&value).

@@ -209,3 +209,27 @@ func TestClone(t *testing.T) {
 	assert.NotEqual(t, q.Args(), q2.Args())
 	assert.NotEqual(t, q.String(), q2.String())
 }
+
+func TestJoin(t *testing.T) {
+	q := sqlf.From("orders o").Select("id").Join("users u", "u.id = o.user_id")
+	defer q.Close()
+	assert.Equal(t, "SELECT id FROM orders o JOIN users u ON (u.id = o.user_id)", q.String())
+}
+
+func TestLeftJoin(t *testing.T) {
+	q := sqlf.From("orders o").Select("id").LeftJoin("users u", "u.id = o.user_id")
+	defer q.Close()
+	assert.Equal(t, "SELECT id FROM orders o LEFT JOIN users u ON (u.id = o.user_id)", q.String())
+}
+
+func TestRightJoin(t *testing.T) {
+	q := sqlf.From("orders o").Select("id").RightJoin("users u", "u.id = o.user_id")
+	defer q.Close()
+	assert.Equal(t, "SELECT id FROM orders o RIGHT JOIN users u ON (u.id = o.user_id)", q.String())
+}
+
+func TestFullJoin(t *testing.T) {
+	q := sqlf.From("orders o").Select("id").FullJoin("users u", "u.id = o.user_id")
+	defer q.Close()
+	assert.Equal(t, "SELECT id FROM orders o FULL JOIN users u ON (u.id = o.user_id)", q.String())
+}

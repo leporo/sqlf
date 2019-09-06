@@ -314,7 +314,10 @@ func (q *Stmt) From(expr string, args ...interface{}) *Stmt {
 /*
 Where adds a filter:
 
-	sqlf.Select("id, name").From("users").Where("email = ?", email).Where("is_active = 1")
+	sqlf.From("users").
+		Select("id, name").
+		Where("email = ?", email).
+		Where("is_active = 1")
 
 */
 func (q *Stmt) Where(expr string, args ...interface{}) *Stmt {
@@ -339,8 +342,42 @@ func (q *Stmt) In(args ...interface{}) *Stmt {
 		}
 	}
 	buf.WriteString(")")
+
 	q.addChunk(posWhere, "", bufToString(&buf.B), args, " ")
+
 	bytebufferpool.Put(buf)
+	return q
+}
+
+/*
+Join adds an INNERT JOIN clause to SELECT statement
+*/
+func (q *Stmt) Join(table, on string) *Stmt {
+	q.join("JOIN ", table, on)
+	return q
+}
+
+/*
+LeftJoin adds a LEFT OUTER JOIN clause to SELECT statement
+*/
+func (q *Stmt) LeftJoin(table, on string) *Stmt {
+	q.join("LEFT JOIN ", table, on)
+	return q
+}
+
+/*
+RightJoin adds a RIGHT OUTER JOIN clause to SELECT statement
+*/
+func (q *Stmt) RightJoin(table, on string) *Stmt {
+	q.join("RIGHT JOIN ", table, on)
+	return q
+}
+
+/*
+FullJoin adds a FULL OUTER JOIN clause to SELECT statement
+*/
+func (q *Stmt) FullJoin(table, on string) *Stmt {
+	q.join("FULL JOIN ", table, on)
 	return q
 }
 
@@ -555,6 +592,22 @@ func (q *Stmt) Clone() *Stmt {
 	return stmt
 }
 
+// join adds a join clause to a SELECT statement
+func (q *Stmt) join(joinType, table, on string) (index int) {
+	buf := bytebufferpool.Get()
+	buf.WriteString(joinType)
+	buf.WriteString(table)
+	buf.Write(joinOn)
+	buf.WriteString(on)
+	buf.WriteByte(')')
+
+	index = q.addChunk(posFrom, "", bufToString(&buf.B), nil, " ")
+
+	bytebufferpool.Put(buf)
+
+	return index
+}
+
 // addChunk adds a clause or expression to a statement.
 func (q *Stmt) addChunk(pos int, clause, expr string, args []interface{}, sep string) (index int) {
 	// Remember the position
@@ -653,6 +706,7 @@ var (
 	space            = []byte{' '}
 	placeholder      = []byte{'?'}
 	placeholderComma = []byte{'?', ','}
+	joinOn           = []byte{' ', 'O', 'N', ' ', '('}
 )
 
 const (
