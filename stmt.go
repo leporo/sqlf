@@ -322,6 +322,28 @@ func (q *Stmt) Where(expr string, args ...interface{}) *Stmt {
 	return q
 }
 
+/*
+In adds IN expression to the current filter.
+
+In method must be called after a Where method call.
+*/
+func (q *Stmt) In(args ...interface{}) *Stmt {
+	buf := bytebufferpool.Get()
+	buf.WriteString("IN (")
+	l := len(args) - 1
+	for i := range args {
+		if i < l {
+			buf.Write(placeholderComma)
+		} else {
+			buf.Write(placeholder)
+		}
+	}
+	buf.WriteString(")")
+	q.addChunk(posWhere, "", bufToString(&buf.B), args, " ")
+	bytebufferpool.Put(buf)
+	return q
+}
+
 // OrderBy adds the ORDER BY clause to SELECT statement
 func (q *Stmt) OrderBy(expr ...string) *Stmt {
 	q.addChunk(posOrderBy, "ORDER BY", strings.Join(expr, ", "), nil, ", ")
@@ -627,7 +649,11 @@ loop:
 	return index
 }
 
-var space = []byte{' '}
+var (
+	space            = []byte{' '}
+	placeholder      = []byte{'?'}
+	placeholderComma = []byte{'?', ','}
+)
 
 const (
 	_        = iota

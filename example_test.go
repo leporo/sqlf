@@ -254,3 +254,16 @@ func ExampleStmt_QueryRowAndClose() {
 		panic(err)
 	}
 }
+
+func ExampleStmt_In() {
+	q := sqlf.From("tasks").
+		Select("id, status").
+		Where("status").In("new", "pending", "wip")
+	fmt.Println(q.String())
+	fmt.Println(q.Args())
+	q.Close()
+
+	// Output:
+	// SELECT id, status FROM tasks WHERE status IN (?,?,?)
+	// [new pending wip]
+}
