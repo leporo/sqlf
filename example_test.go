@@ -267,3 +267,23 @@ func ExampleStmt_In() {
 	// SELECT id, status FROM tasks WHERE status IN (?,?,?)
 	// [new pending wip]
 }
+
+func ExampleStmt_Union() {
+	q := sqlf.From("tasks").
+		Select("id, status").
+		Where("status = ?", "new").
+		Union(true, sqlf.From("tasks").
+			Select("id, status").
+			Where("status = ?", "pending")).
+		Union(true, sqlf.From("tasks").
+			Select("id, status").
+			Where("status = ?", "wip")).
+		OrderBy("id")
+	fmt.Println(q.String())
+	fmt.Println(q.Args())
+	q.Close()
+
+	// Output:
+	// SELECT id, status FROM tasks WHERE status = ? UNION ALL SELECT id, status FROM tasks WHERE status = ? UNION ALL SELECT id, status FROM tasks WHERE status = ? ORDER BY id
+	// [new pending wip]
+}

@@ -229,7 +229,7 @@ Use `SubQuery` method to add a sub query to a statement:
 	q.Close()
 ```
 
-Not that if a subquery uses no arguments, it's more effective to add it as SQL fragment:
+Note that if a subquery uses no arguments, it's more effective to add it as SQL fragment:
 
 ```go
 	q := sqlf.From("orders o").
@@ -239,6 +239,21 @@ Not that if a subquery uses no arguments, it's more effective to add it as SQL f
         OrderBy("id DESC")
     // ...
     q.Close()
+```
+
+#### Unions
+
+Use `Union` method to combine results of two queries:
+
+```go
+	q := sqlf.From("tasks").
+		Select("id, status").
+		Where("status = ?", "new").
+		Union(false, sqlf.PostgreSQL.From("tasks").
+			Select("id, status").
+            Where("status = ?", "wip"))
+    // ...
+	q.Close()
 ```
 
 ### INSERT

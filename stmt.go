@@ -478,6 +478,41 @@ func (q *Stmt) SubQuery(prefix, suffix string, query *Stmt) *Stmt {
 }
 
 /*
+Union adds a UNION clause to the statement.
+
+all argument controls if UNION ALL or UNION clause
+is to be constructed. Use UNION ALL if possible to
+get faster queries.
+*/
+func (q *Stmt) Union(all bool, query *Stmt) *Stmt {
+	p := posUnion
+	if len(q.chunks) > 0 {
+		last := (&q.chunks[len(q.chunks)-1]).pos
+		if last >= p {
+			p = last + 1
+		}
+	}
+	var index int
+	if all {
+		index = q.addChunk(p, "UNION ALL ", "", query.args, "")
+	} else {
+		index = q.addChunk(p, "UNION ", "", query.args, "")
+	}
+	chunk := &q.chunks[index]
+	// Make sure subquery is not dialect-specific.
+	if query.dialect != NoDialect {
+		query.dialect = NoDialect
+		query.Invalidate()
+	}
+	q.buf.WriteString(query.String())
+	chunk.bufHigh = q.buf.Len()
+	// Close the subquery
+	query.Close()
+
+	return q
+}
+
+/*
 Clause appends a raw SQL fragment to the statement.
 
 Use it to add a raw SQL fragment like ON CONFLICT, ON DUPLICATE KEY, WINDOW, etc.
@@ -725,6 +760,7 @@ const (
 	posWhere
 	posGroupBy
 	posHaving
+	posUnion
 	posOrderBy
 	posLimit
 	posOffset

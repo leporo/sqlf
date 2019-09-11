@@ -233,3 +233,14 @@ func TestFullJoin(t *testing.T) {
 	defer q.Close()
 	assert.Equal(t, "SELECT id FROM orders o FULL JOIN users u ON (u.id = o.user_id)", q.String())
 }
+
+func TestUnion(t *testing.T) {
+	q := sqlf.From("tasks").
+		Select("id, status").
+		Where("status = ?", "new").
+		Union(false, sqlf.PostgreSQL.From("tasks").
+			Select("id, status").
+			Where("status = ?", "wip"))
+	defer q.Close()
+	assert.Equal(t, "SELECT id, status FROM tasks WHERE status = ? UNION SELECT id, status FROM tasks WHERE status = ?", q.String())
+}
