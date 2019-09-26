@@ -203,6 +203,22 @@ func ExampleStmt_With() {
 	// WITH regional_sales AS (SELECT region, SUM(amount) AS total_sales FROM orders GROUP BY region), top_regions AS (SELECT region FROM regional_sales WHERE total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)) SELECT region, product, SUM(quantity) AS product_units, SUM(amount) AS product_sales FROM orders WHERE region IN (SELECT region FROM top_regions) GROUP BY region, product
 }
 
+func ExampleStmt_From() {
+	q := sqlf.Select("*").
+		From("").
+		SubQuery(
+			"(", ") counted_news",
+			sqlf.From("news").
+				Select("id, section, header, score").
+				Select("row_number() OVER (PARTITION BY section ORDER BY score DESC) AS rating_in_section").
+				OrderBy("section, rating_in_section")).
+		Where("rating_in_section <= 5")
+	fmt.Println(q.String())
+	q.Close()
+	// Output:
+	//SELECT * FROM (SELECT id, section, header, score, row_number() OVER (PARTITION BY section ORDER BY score DESC) AS rating_in_section FROM news ORDER BY section, rating_in_section) counted_news WHERE rating_in_section <= 5
+}
+
 func ExampleStmt_SubQuery() {
 	q := sqlf.From("orders o").
 		Select("date, region").

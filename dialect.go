@@ -98,7 +98,7 @@ func (b Dialect) DeleteFrom(tableName string) *Stmt {
 }
 
 // writePg function copies s into buf and replaces ? placeholders with $1, $2...
-func writePg(argNo int64, s []byte, buf *bytebufferpool.ByteBuffer) (int64, error) {
+func writePg(argNo int, s []byte, buf *bytebufferpool.ByteBuffer) (int, error) {
 	var err error
 	start := 0
 	// Iterate by runes

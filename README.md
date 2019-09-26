@@ -241,6 +241,24 @@ Note that if a subquery uses no arguments, it's more effective to add it as SQL 
     q.Close()
 ```
 
+To select from sub-query pass an empty string to From and immediately call a SubQuery method:
+
+```go
+	q := sqlf.Select("").
+		From("").
+		SubQuery(
+			"(", ") counted_news",
+			sqlf.From("news").
+				Select("id, section, header, score").
+				Select("row_number() OVER (PARTITION BY section ORDER BY score DESC) AS rating_in_section").
+				OrderBy("section, rating_in_section")).
+		Where("rating_in_section <= 5")
+    // ...
+    q.Close()
+```
+
+The query constructed by this example returns top 5 news in each section.
+
 #### Unions
 
 Use `Union` method to combine results of two queries:

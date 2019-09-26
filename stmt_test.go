@@ -244,3 +244,15 @@ func TestUnion(t *testing.T) {
 	defer q.Close()
 	assert.Equal(t, "SELECT id, status FROM tasks WHERE status = ? UNION SELECT id, status FROM tasks WHERE status = ?", q.String())
 }
+
+func TestLimit(t *testing.T) {
+	q := sqlf.From("items").
+		Select("id").
+		Where("id > ?", 42).
+		Limit(10).
+		Limit(11).
+		Limit(20)
+	defer q.Close()
+	assert.Equal(t, "SELECT id FROM items WHERE id > ? LIMIT ?", q.String())
+	assert.Equal(t, []interface{}{42, 20}, q.Args())
+}

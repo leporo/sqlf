@@ -532,7 +532,7 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 // String method builds and returns an SQL statement.
 func (q *Stmt) String() string {
 	if q.sql == nil {
-		var argNo int64 = 1
+		var argNo int = 1
 		// Build a query
 		buf := getBuffer()
 		q.sql = buf
@@ -666,6 +666,10 @@ loop:
 		case chunk.pos == pos:
 			// Do nothing if a clause is already there and no expressions are to be added
 			if expr == "" {
+				// See if arguments are to be updated
+				if argLen > 0 {
+					copy(q.args[len(q.args)-argTail-chunk.argLen:], args)
+				}
 				return i
 			}
 			// Write a separator
