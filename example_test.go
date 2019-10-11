@@ -10,15 +10,15 @@ import (
 
 type dummyDB int
 
-func (db *dummyDB) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (db *dummyDB) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return nil, nil
 }
 
-func (db *dummyDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (db *dummyDB) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return nil, nil
 }
 
-func (db *dummyDB) QueryRow(query string, args ...interface{}) *sql.Row {
+func (db *dummyDB) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return nil
 }
 

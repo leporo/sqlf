@@ -9,17 +9,6 @@ import (
 // It's an interface accepted by Query, QueryRow and Exec methods.
 // Both sql.DB, sql.Conn and sql.Tx can be passed as executor.
 type Executor interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
-}
-
-// ContextExecutor performs SQL queries with context.
-// It's an interface accepted by Query, QueryRow and Exec methods.
-// Both sql.DB, sql.Conn and sql.Tx can be passed as context executor.
-type ContextExecutor interface {
-	Executor
-
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
@@ -30,16 +19,12 @@ type ContextExecutor interface {
 // If scan targets were set via To method calls, Query method automatically
 // executes rows.Scan right before calling a handler function.
 func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Rows)) error {
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	// Fetch rows
-	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		rows, err = ctxExecutor.QueryContext(ctx, q.String(), q.args...)
-	} else {
-		rows, err = db.Query(q.String(), q.args...)
+	if ctx == nil {
+		ctx = context.Background()
 	}
+
+	// Fetch rows
+	rows, err := db.QueryContext(ctx, q.String(), q.args...)
 	if err != nil {
 		return err
 	}
@@ -82,12 +67,10 @@ func (q *Stmt) QueryAndClose(ctx context.Context, db Executor, handler func(rows
 // QueryRow executes the statement via Executor methods
 // and scans values to variables bound via To method calls.
 func (q *Stmt) QueryRow(ctx context.Context, db Executor) error {
-	var row *sql.Row
-	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		row = ctxExecutor.QueryRowContext(ctx, q.String(), q.args...)
-	} else {
-		row = db.QueryRow(q.String(), q.args...)
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	row := db.QueryRowContext(ctx, q.String(), q.args...)
 
 	return row.Scan(q.dest...)
 }
@@ -106,11 +89,10 @@ func (q *Stmt) QueryRowAndClose(ctx context.Context, db Executor) error {
 
 // Exec executes the statement.
 func (q *Stmt) Exec(ctx context.Context, db Executor) (sql.Result, error) {
-	if ctxExecutor, ok := db.(ContextExecutor); ok && ctx != nil {
-		return ctxExecutor.ExecContext(ctx, q.String(), q.args...)
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	return db.Exec(q.String(), q.args...)
+	return db.ExecContext(ctx, q.String(), q.args...)
 }
 
 // ExecAndClose executes the statement and releases all the objects

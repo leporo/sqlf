@@ -241,7 +241,9 @@ Note that if a subquery uses no arguments, it's more effective to add it as SQL 
     q.Close()
 ```
 
-To select from sub-query pass an empty string to From and immediately call a SubQuery method:
+To select from sub-query pass an empty string to From and immediately call a SubQuery method.
+
+The query constructed by the following example returns top 5 news in each section:
 
 ```go
 	q := sqlf.Select("").
@@ -257,8 +259,6 @@ To select from sub-query pass an empty string to From and immediately call a Sub
     q.Close()
 ```
 
-The query constructed by this example returns top 5 news in each section.
-
 #### Unions
 
 Use `Union` method to combine results of two queries:
@@ -267,7 +267,7 @@ Use `Union` method to combine results of two queries:
 	q := sqlf.From("tasks").
 		Select("id, status").
 		Where("status = ?", "new").
-		Union(false, sqlf.PostgreSQL.From("tasks").
+		Union(true, sqlf.PostgreSQL.From("tasks").
 			Select("id, status").
             Where("status = ?", "wip"))
     // ...

@@ -29,7 +29,7 @@ type dbConfig struct {
 }
 
 var dbList = []dbConfig{
-	dbConfig{
+	{
 		driver:  "sqlite3",
 		envVar:  "SQLF_SQLITE_DSN",
 		defDSN:  ":memory:",

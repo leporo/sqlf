@@ -112,12 +112,11 @@ func BenchmarkDest(b *testing.B) {
 func selectComplex(b *testing.B, dialect sqlf.Dialect) {
 	for n := 0; n < b.N; n++ {
 		q := dialect.Select("DISTINCT a, b, z, y, x").
-			// Distinct().
 			From("c").
-			Where("d = ? OR e = ?", 1, "wat").
-			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("(d = ? OR e = ?)", 1, "wat").
+			Where("f = ? and x = ?", 2, "hi").
 			Where("g = ?", 3).
-			// Where(dbr.Eq{"h": []int{1, 2, 3}}).
+			Where("h").In(1, 2, 3).
 			GroupBy("i").
 			GroupBy("ii").
 			GroupBy("iii").
@@ -144,8 +143,7 @@ func selectSubqueryFmt(b *testing.B, dialect sqlf.Dialect) {
 		q := dialect.Select("DISTINCT a, b").
 			Select(fmt.Sprintf("(%s) AS subq", subQuery)).
 			From("c").
-			// Distinct().
-			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("f = ? and x = ?", 2, "hi").
 			Where("g = ?", 3).
 			OrderBy("l").
 			OrderBy("l").
@@ -164,8 +162,7 @@ func selectSubquery(b *testing.B, dialect sqlf.Dialect) {
 				From("tickets").
 				Where("subdomain_id = ? and (state = ? or state = ?)", 1, "open", "spam")).
 			From("c").
-			// Distinct().
-			// Where(dbr.Eq{"f": 2, "x": "hi"}).
+			Where("f = ? and x = ?", 2, "hi").
 			Where("g = ?", 3).
 			OrderBy("l").
 			OrderBy("l").
