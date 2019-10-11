@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/leporo/sqlf)](https://goreportcard.com/report/github.com/leporo/sqlf)
 
 
-A fast and flexible SQL query builder for Go.
+A fast SQL query builder for Go.
 
 `sqlf` statement builder provides a way to:
 - Combine SQL statements from fragments of raw SQL and arguments that match
@@ -42,14 +42,19 @@ err := sqlf.From("orders").
         sqlf.From("regional_sales").
             Select("region").
             Where("total_sales > (SELECT SUM(total_sales)/10 FROM regional_sales)")).
+    // Map query fields to variables
     Select("region").To(&region).
     Select("product").To(&product).
     Select("SUM(quantity)").To(&productUnits).
     Select("SUM(amount) AS product_sales").To(&productSales).
+    //
     Where("region IN (SELECT region FROM top_regions)").
     GroupBy("region, product").
     OrderBy("product_sales DESC").
+    // Execute the query
     QueryAndClose(ctx, db, func(row *sql.Rows){
+        // Callback function is called for every returned row.
+        // Row values are scanned automatically to bound variables.
         fmt.Printf("%s\t%s\t%d\t$%.2f\n", region, product, productUnits, productSales)
     })
 if err != nil {

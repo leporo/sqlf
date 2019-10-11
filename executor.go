@@ -16,7 +16,7 @@ type Executor interface {
 
 // Query executes the statement.
 // For every row of a returned dataset it calls a handler function.
-// If scan targets were set via To method calls, Query method automatically
+// If scan targets were set via To method calls, Query method
 // executes rows.Scan right before calling a handler function.
 func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Rows)) error {
 	if ctx == nil {
@@ -58,6 +58,9 @@ func (q *Stmt) Query(ctx context.Context, db Executor, handler func(rows *sql.Ro
 
 // QueryAndClose executes the statement and releases all the resources that
 // can be reused to a pool. Do not call any Stmt methods after this call.
+// For every row of a returned dataset QueryAndClose executes a handler function.
+// If scan targets were set via To method calls, QueryAndClose method
+// executes rows.Scan right before calling a handler function.
 func (q *Stmt) QueryAndClose(ctx context.Context, db Executor, handler func(rows *sql.Rows)) error {
 	err := q.Query(ctx, db, handler)
 	q.Close()
