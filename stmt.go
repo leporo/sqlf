@@ -274,19 +274,23 @@ both the list of columns and values to be inserted:
 produces
 
 	INSERT INTO table (field) VALUES (42)
+
+Do not use it to construct ON CONFLICT DO UPDATE SET or similar clauses.
+Use generic Clause and Expr methods instead:
+
+	q.Clause("ON CONFLICT DO UPDATE SET").Expr("column_name = ?", value)
 */
 func (q *Stmt) Set(field string, value interface{}) *Stmt {
 	return q.SetExpr(field, "?", value)
 }
 
 /*
-SetExpr is an extended version of a Set method.
+SetExpr is an extended version of Set method.
 
 	q.SetExpr("field", "field + 1")
 	q.SetExpr("field", "? + ?", 31, 11)
 */
 func (q *Stmt) SetExpr(field, expr string, args ...interface{}) *Stmt {
-	// TODO How to handle both INSERT ... VALUES and SET in ON DUPLICATE KEY UPDATE?
 	p := 0
 	for _, chunk := range q.chunks {
 		if chunk.pos == posInsert || chunk.pos == posUpdate {
