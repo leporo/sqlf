@@ -645,7 +645,9 @@ func (q *Stmt) Bind(data interface{}) *Stmt {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		dbFieldName := typ.Field(i).Tag.Get("db")
-		q.Select(dbFieldName).To(field.Addr().Interface())
+		if dbFieldName != "" {
+			q.Select(dbFieldName).To(field.Addr().Interface())
+		}
 	}
 	return q
 }
