@@ -1,6 +1,7 @@
 package sqlf
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/valyala/bytebufferpool"
@@ -629,6 +630,24 @@ func (q *Stmt) Clone() *Stmt {
 	}
 
 	return stmt
+}
+
+// Bind adds structure fields to SELECT statement.
+// Structure fields have to be annotated with "db" tag.
+// Reflect-based Bind is slightly slower than `Select("field").To(&record.field)`
+// but provides an easier way to retrieve data.
+//
+// Note: this method does no type checks and returns no errors.
+func (q *Stmt) Bind(data interface{}) *Stmt {
+	typ := reflect.TypeOf(data).Elem()
+	val := reflect.ValueOf(data).Elem()
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		dbFieldName := typ.Field(i).Tag.Get("db")
+		q.Select(dbFieldName).To(field.Addr().Interface())
+	}
+	return q
 }
 
 // join adds a join clause to a SELECT statement

@@ -33,6 +33,8 @@ func Example() {
 		productSales float64
 	)
 
+	sqlf.SetDialect(sqlf.PostgreSQL)
+
 	err := sqlf.From("orders").
 		With("regional_sales",
 			sqlf.From("orders").
@@ -269,6 +271,25 @@ func ExampleStmt_QueryRowAndClose() {
 		Select("product_id").To(&o.productId).
 		Select("price").To(&o.price).
 		Select("is_deleted").To(&o.isDeleted).
+		Where("id = ?", 42).
+		QueryRowAndClose(ctx, db)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func ExampleStmt_Bind() {
+	type Offer struct {
+		Id        int64   `db:"id"`
+		ProductId int64   `db:"product_id"`
+		Price     float64 `db:"price"`
+		IsDeleted bool    `db:"is_deleted"`
+	}
+
+	var o Offer
+
+	err := sqlf.From("offers").
+		Bind(&o).
 		Where("id = ?", 42).
 		QueryRowAndClose(ctx, db)
 	if err != nil {

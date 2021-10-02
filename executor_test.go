@@ -132,6 +132,22 @@ func TestQueryRowAndClose(t *testing.T) {
 	})
 }
 
+func TestBind(t *testing.T) {
+	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
+		var u struct {
+			ID   int64  `db:"id"`
+			Name string `db:"name"`
+		}
+		err := env.sqlf.From("users").
+			Bind(&u).
+			Where("id = ?", 2).
+			QueryRowAndClose(ctx, env.db)
+		assert.NoError(t, err, "Failed to execute a query: %v", err)
+		assert.Equal(t, "User 2", u.Name)
+		assert.EqualValues(t, 2, u.ID)
+	})
+}
+
 func TestExec(t *testing.T) {
 	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
 		var (
@@ -157,6 +173,51 @@ func TestExec(t *testing.T) {
 		q.QueryRow(ctx, env.db)
 
 		assert.Equal(t, 2, count)
+	})
+}
+
+func TestPagination(t *testing.T) {
+	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
+		type Income struct {
+			Id         int64   `db:"id"`
+			UserId     int64   `db:"user_id"`
+			FromUserId int64   `db:"from_user_id"`
+			Amount     float64 `db:"amount"`
+		}
+
+		type PaginatedIncomes struct {
+			Count int64
+			Data  []Income
+		}
+
+		var (
+			result PaginatedIncomes
+			o      Income
+			err    error
+		)
+
+		// Create a base query, apply filters
+		qs := sqlf.From("incomes").Where("amount > ?", 100)
+		// Clone a statement and retrieve the record count
+		err = qs.Clone().
+			Select("count(id)").To(&result.Count).
+			QueryRowAndClose(ctx, env.db)
+		if err != nil {
+			return
+		}
+
+		// Retrieve page data
+		err = qs.Bind(&o).
+			OrderBy("id desc").
+			Paginate(1, 2).
+			QueryAndClose(ctx, env.db, func(rows *sql.Rows) {
+				result.Data = append(result.Data, o)
+			})
+		if err != nil {
+			return
+		}
+		assert.EqualValues(t, 4, result.Count)
+		assert.Len(t, result.Data, 2)
 	})
 }
 

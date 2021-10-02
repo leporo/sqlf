@@ -51,6 +51,20 @@ func BenchmarkManyFields(b *testing.B) {
 	}
 }
 
+func BenchmarkBind(b *testing.B) {
+	var u struct {
+		ID int64 `db:"id"`
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		q := sqlf.From("table").Bind(&u).Where("id = ?", 42)
+		s = q.String()
+		q.Close()
+	}
+}
+
 func BenchmarkManyFieldsPg(b *testing.B) {
 	fields := make([]string, 0, 100)
 

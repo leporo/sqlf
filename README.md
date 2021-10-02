@@ -34,6 +34,8 @@ var (
     productSales float64
 )
 
+sqlf.SetDialect(sqlf.PostgreSQL)
+
 err := sqlf.From("orders").
     With("regional_sales",
         sqlf.From("orders").
@@ -63,7 +65,28 @@ if err != nil {
 }
 ```
 
-Bind structures to query results:
+Bind a structure:
+
+```go
+type Offer struct {
+    Id        int64   `db:"id"`
+    ProductId int64   `db:"product_id"`
+    Price     float64 `db:"price"`
+    IsDeleted bool    `db:"is_deleted"`
+}
+
+var o Offer
+
+err := sqlf.From("offers").
+    Bind(&o).
+    Where("id = ?", 42).
+    QueryRowAndClose(ctx, db)
+if err != nil {
+    panic(err)
+}
+```
+
+Retrieve data to private fields with more granular control on retrieved fields:
 
 ```go
 type Offer struct {
@@ -92,11 +115,8 @@ Some SQL fragments, like a list of fields to be selected or filtering condition 
 ```go
 func (o *Offer) Select() *sqlf.Stmt {
     return sqlf.From("products").
-        Select("id").To(&p.id).
-        Select("product_id").To(&p.productId).
-        Select("price").To(&p.price).
-        Select("is_deleted").To(&p.isDeleted).
-        // Ignore deleted offers
+        .Bind(o)
+        // Ignore records, marked as deleted
         Where("is_deleted = false")
 }
 
