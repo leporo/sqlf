@@ -148,6 +148,25 @@ func TestBind(t *testing.T) {
 	})
 }
 
+func TestBindNested(t *testing.T) {
+	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
+		type Parent struct {
+			ID int64 `db:"id"`
+		}
+		var u struct {
+			Parent
+			Name string `db:"name"`
+		}
+		err := env.sqlf.From("users").
+			Bind(&u).
+			Where("id = ?", 2).
+			QueryRowAndClose(ctx, env.db)
+		assert.NoError(t, err, "Failed to execute a query: %v", err)
+		assert.Equal(t, "User 2", u.Name)
+		assert.EqualValues(t, 2, u.ID)
+	})
+}
+
 func TestExec(t *testing.T) {
 	forEveryDB(t, func(ctx context.Context, env *dbEnv) {
 		var (

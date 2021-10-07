@@ -52,8 +52,12 @@ func BenchmarkManyFields(b *testing.B) {
 }
 
 func BenchmarkBind(b *testing.B) {
-	var u struct {
+	type Record struct {
 		ID int64 `db:"id"`
+	}
+	var u struct {
+		Record
+		Name string `db:"name"`
 	}
 
 	b.ResetTimer()

@@ -644,9 +644,17 @@ func (q *Stmt) Bind(data interface{}) *Stmt {
 
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
-		dbFieldName := typ.Field(i).Tag.Get("db")
-		if dbFieldName != "" {
-			q.Select(dbFieldName).To(field.Addr().Interface())
+		switch field.Kind() {
+		case reflect.Struct:
+			t := typ.Field(i)
+			if t.Anonymous {
+				q.Bind(field.Addr().Interface())
+			}
+		default:
+			dbFieldName := typ.Field(i).Tag.Get("db")
+			if dbFieldName != "" {
+				q.Select(dbFieldName).To(field.Addr().Interface())
+			}
 		}
 	}
 	return q

@@ -256,3 +256,22 @@ func TestLimit(t *testing.T) {
 	assert.Equal(t, "SELECT id FROM items WHERE id > ? LIMIT ?", q.String())
 	assert.Equal(t, []interface{}{42, 20}, q.Args())
 }
+
+func TestBindStruct(t *testing.T) {
+	type Parent struct {
+		ID      int64 `db:"id"`
+		Skipped string
+	}
+	var u struct {
+		Parent
+		Name  string `db:"name"`
+		Extra int64
+	}
+	q := sqlf.From("users").
+		Bind(&u).
+		Where("id = ?", 2)
+	defer q.Close()
+	assert.Equal(t, "SELECT id, name FROM users WHERE id = ?", q.String())
+	assert.Equal(t, []interface{}{2}, q.Args())
+	assert.EqualValues(t, []interface{}{&u.ID, &u.Name}, q.Dest())
+}
