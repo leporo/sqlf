@@ -1,9 +1,8 @@
 # sqlf
 
 [![GoDoc Reference](https://godoc.org/github.com/leporo/sqlf?status.svg)](http://godoc.org/github.com/leporo/sqlf)
-![Build Status](https://github.com/leporo/sqlf/actions/workflows/build/badge.svg)
+![Build Status](https://github.com/leporo/sqlf/actions/workflows/build.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leporo/sqlf)](https://goreportcard.com/report/github.com/leporo/sqlf)
-[![Go Coverage](https://gocover.io/_badge/github.com/leporo/sqlf)](https://gocover.io/_badge/github.com/leporo/sqlf)
 
 
 A fast SQL query builder for Go.
