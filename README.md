@@ -1,20 +1,31 @@
 # sqlf
 
 [![GoDoc Reference](https://godoc.org/github.com/leporo/sqlf?status.svg)](http://godoc.org/github.com/leporo/sqlf)
-[![Build Status](https://travis-ci.org/leporo/sqlf.svg?branch=master)](https://travis-ci.org/leporo/sqlf)
+![Build Status](https://github.com/leporo/sqlf/actions/workflows/build/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leporo/sqlf)](https://goreportcard.com/report/github.com/leporo/sqlf)
 [![Go Coverage](https://gocover.io/_badge/github.com/leporo/sqlf)](https://gocover.io/_badge/github.com/leporo/sqlf)
 
 
 A fast SQL query builder for Go.
 
-`sqlf` statement builder provides a way to:
-- Combine SQL statements from fragments of raw SQL and arguments that match
-  those fragments,
-- Map columns to variables to be referenced by Scan,
-- Convert ? placeholders into numbered ones for PostgreSQL ($1, $2, etc).
+What `sqlf` does?
 
-`sqlf.Stmt` has methods to execute a query using any database/sql compatible driver.
+- It helps you efficiently build an SQL statement in run-time.
+- You may change the number of affected columns and change the number of arguments in a safe way.
+- You may use SQL expressions (like `UPDATE counters SET counter = counter + 1`) in your SQL statements.
+- You may dynamically apply filters by adding where conditions, change result ordering, etc.
+  those fragments.
+- You may always use ? placeholders in your SQL fragments - `sqlf` converts them to PostgreSQL-like `$1, $2, ...` ones if needed.
+- You may `.Bind` your structure to database columns like you do with other similar libraries.
+- `sqlf.Stmt` has methods to execute a query using any database/sql compatible driver.
+
+What `sqlf` doesn't?
+
+- `sqlf` isn't an ORM, you still need to use raw SQL.
+- There are no database schema migrations or any other database schema maintenance tools.
+- There are no compile-time type checks for query arguments.
+- There is no wrapper for `OR` clause as it affects performance and in most cases can be avoided by using `UNION` expressions, `WITH` clause or window functions. Other option is to split a query into two.
+- There are no extra checks to help a developer pinpoint the cause of issue. There are thoughts on making a debug wrapper to ease the debug a bit, but so far those are just thoughts.
 
 ## Is It Fast?
 
