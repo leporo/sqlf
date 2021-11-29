@@ -259,7 +259,8 @@ func TestLimit(t *testing.T) {
 
 func TestBindStruct(t *testing.T) {
 	type Parent struct {
-		ID      int64 `db:"id"`
+		ID      int64     `db:"id"`
+		Date    time.Time `db:"date"`
 		Skipped string
 	}
 	var u struct {
@@ -271,7 +272,7 @@ func TestBindStruct(t *testing.T) {
 		Bind(&u).
 		Where("id = ?", 2)
 	defer q.Close()
-	assert.Equal(t, "SELECT id, name FROM users WHERE id = ?", q.String())
+	assert.Equal(t, "SELECT id, date, name FROM users WHERE id = ?", q.String())
 	assert.Equal(t, []interface{}{2}, q.Args())
-	assert.EqualValues(t, []interface{}{&u.ID, &u.Name}, q.Dest())
+	assert.EqualValues(t, []interface{}{&u.ID, &u.Date, &u.Name}, q.Dest())
 }
