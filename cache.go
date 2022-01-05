@@ -6,6 +6,13 @@ import (
 
 type sqlCache map[string]string
 
+/*
+ClearCache clears the statement cache.
+
+In most cases you don't need to care about it. It's there to
+let caller free memory when a caller executes zillions of unique
+SQL statements.
+*/
 func (d *Dialect) ClearCache() {
 	d.cacheLock.Lock()
 	d.cache = make(sqlCache)

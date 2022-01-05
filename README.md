@@ -23,7 +23,7 @@ What `sqlf` doesn't?
 - There are no database schema migrations or any other database schema maintenance tools.
 - There are no compile-time type checks for query arguments, column and table names.
 - There is no wrapper for `OR` clause. It affects performance and in most cases can be avoided by using `UNION` expressions, `WITH` clause or window functions. Other option is to split a query into two.
-- `sqlf` doesn't help a developer to pinpoint the cause of issue with SQL statement. There are thoughts on making a debug wrapper to ease the debug a bit, but so far those are just thoughts.
+- `sqlf` doesn't help a developer to pinpoint the cause of issue with SQL statement.
 
 ## Is It Fast?
 
