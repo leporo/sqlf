@@ -265,14 +265,15 @@ func TestBindStruct(t *testing.T) {
 	}
 	var u struct {
 		Parent
-		Name  string `db:"name"`
-		Extra int64
+		ChildTime time.Time `db:"child_time"`
+		Name      string    `db:"name"`
+		Extra     int64
 	}
 	q := sqlf.From("users").
 		Bind(&u).
 		Where("id = ?", 2)
 	defer q.Close()
-	assert.Equal(t, "SELECT id, date, name FROM users WHERE id = ?", q.String())
+	assert.Equal(t, "SELECT id, date, child_time, name FROM users WHERE id = ?", q.String())
 	assert.Equal(t, []interface{}{2}, q.Args())
-	assert.EqualValues(t, []interface{}{&u.ID, &u.Date, &u.Name}, q.Dest())
+	assert.EqualValues(t, []interface{}{&u.ID, &u.Date, &u.ChildTime, &u.Name}, q.Dest())
 }
