@@ -10,6 +10,7 @@ import (
 var s string
 
 func BenchmarkSelectDontClose(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		s = q.String()
@@ -17,6 +18,7 @@ func BenchmarkSelectDontClose(b *testing.B) {
 }
 
 func BenchmarkSelect(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		s = q.String()
@@ -25,6 +27,7 @@ func BenchmarkSelect(b *testing.B) {
 }
 
 func BenchmarkSelectPg(b *testing.B) {
+	sqlf.PostgreSQL.ClearCache()
 	for i := 0; i < b.N; i++ {
 		q := sqlf.PostgreSQL.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 		s = q.String()
@@ -38,6 +41,8 @@ func BenchmarkManyFields(b *testing.B) {
 	for n := 1; n <= cap(fields); n++ {
 		fields = append(fields, fmt.Sprintf("field_%d", n))
 	}
+
+	sqlf.NoDialect.ClearCache()
 
 	b.ResetTimer()
 
@@ -59,6 +64,7 @@ func BenchmarkBind(b *testing.B) {
 		Record
 		Name string `db:"name"`
 	}
+	sqlf.NoDialect.ClearCache()
 
 	b.ResetTimer()
 
@@ -76,6 +82,8 @@ func BenchmarkManyFieldsPg(b *testing.B) {
 		fields = append(fields, fmt.Sprintf("field_%d", n))
 	}
 
+	sqlf.PostgreSQL.ClearCache()
+
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -89,6 +97,7 @@ func BenchmarkManyFieldsPg(b *testing.B) {
 }
 
 func BenchmarkMixedOrder(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	for i := 0; i < b.N; i++ {
 		q := sqlf.Select("id").Where("id > ?", 42).From("table").Where("id < ?", 1000)
 		s = q.String()
@@ -97,6 +106,7 @@ func BenchmarkMixedOrder(b *testing.B) {
 }
 
 func BenchmarkBuildPg(b *testing.B) {
+	sqlf.PostgreSQL.ClearCache()
 	q := sqlf.PostgreSQL.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 
 	for i := 0; i < b.N; i++ {
@@ -106,6 +116,7 @@ func BenchmarkBuildPg(b *testing.B) {
 }
 
 func BenchmarkBuild(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	q := sqlf.Select("id").From("table").Where("id > ?", 42).Where("id < ?", 1000)
 
 	for i := 0; i < b.N; i++ {
@@ -115,6 +126,7 @@ func BenchmarkBuild(b *testing.B) {
 }
 
 func BenchmarkDest(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	var (
 		field1 int
 		field2 string
@@ -127,7 +139,8 @@ func BenchmarkDest(b *testing.B) {
 	}
 }
 
-func selectComplex(b *testing.B, dialect sqlf.Dialect) {
+func selectComplex(b *testing.B, dialect *sqlf.Dialect) {
+	dialect.ClearCache()
 	for n := 0; n < b.N; n++ {
 		q := dialect.Select("DISTINCT a, b, z, y, x").
 			From("c").
@@ -151,7 +164,8 @@ func selectComplex(b *testing.B, dialect sqlf.Dialect) {
 	}
 }
 
-func selectSubqueryFmt(b *testing.B, dialect sqlf.Dialect) {
+func selectSubqueryFmt(b *testing.B, dialect *sqlf.Dialect) {
+	dialect.ClearCache()
 	for n := 0; n < b.N; n++ {
 		sq := dialect.Select("id").
 			From("tickets").
@@ -173,7 +187,8 @@ func selectSubqueryFmt(b *testing.B, dialect sqlf.Dialect) {
 	}
 }
 
-func selectSubquery(b *testing.B, dialect sqlf.Dialect) {
+func selectSubquery(b *testing.B, dialect *sqlf.Dialect) {
+	dialect.ClearCache()
 	for n := 0; n < b.N; n++ {
 		q := dialect.Select("DISTINCT a, b").
 			SubQuery("(", ") AS subq", sqlf.Select("id").
@@ -216,6 +231,7 @@ func BenchmarkSelectSubqueryPostgreSQL(b *testing.B) {
 }
 
 func BenchmarkWith(b *testing.B) {
+	sqlf.NoDialect.ClearCache()
 	for n := 0; n < b.N; n++ {
 		q := sqlf.From("orders").
 			With("regional_sales",
@@ -242,6 +258,7 @@ func BenchmarkIn(b *testing.B) {
 	for i := 0; i < len(a); i++ {
 		a[i] = i + 1
 	}
+	sqlf.NoDialect.ClearCache()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		q := sqlf.From("orders").

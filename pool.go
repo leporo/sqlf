@@ -16,7 +16,7 @@ func newStmt() interface{} {
 	}
 }
 
-func getStmt(d Dialect) *Stmt {
+func getStmt(d *Dialect) *Stmt {
 	stmt := stmtPool.Get().(*Stmt)
 	stmt.dialect = d
 	stmt.buf = getBuffer()
@@ -39,10 +39,7 @@ func reuseStmt(q *Stmt) {
 	}
 	putBuffer(q.buf)
 	q.buf = nil
-	if q.sql != nil {
-		putBuffer(q.sql)
-	}
-	q.sql = nil
+	q.sql = ""
 
 	stmtPool.Put(q)
 }

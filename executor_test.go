@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/leporo/sqlf"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -18,14 +18,14 @@ import (
 type dbEnv struct {
 	driver string
 	db     *sql.DB
-	sqlf   sqlf.Dialect
+	sqlf   *sqlf.Dialect
 }
 
 type dbConfig struct {
 	driver  string
 	envVar  string
 	defDSN  string
-	dialect sqlf.Dialect
+	dialect *sqlf.Dialect
 }
 
 var dbList = []dbConfig{
@@ -115,8 +115,8 @@ func TestQueryRow(t *testing.T) {
 			Where("id = ?", 1)
 		err := q.QueryRow(ctx, env.db)
 		q.Close()
-		assert.NoError(t, err, "Failed to execute a query: %v", err)
-		assert.Equal(t, "User 1", name)
+		require.NoError(t, err, "Failed to execute a query: %v", err)
+		require.Equal(t, "User 1", name)
 	})
 }
 
@@ -127,8 +127,8 @@ func TestQueryRowAndClose(t *testing.T) {
 			Select("name").To(&name).
 			Where("id = ?", 1).
 			QueryRowAndClose(ctx, env.db)
-		assert.NoError(t, err, "Failed to execute a query: %v", err)
-		assert.Equal(t, "User 1", name)
+		require.NoError(t, err, "Failed to execute a query: %v", err)
+		require.Equal(t, "User 1", name)
 	})
 }
 
@@ -142,9 +142,9 @@ func TestBind(t *testing.T) {
 			Bind(&u).
 			Where("id = ?", 2).
 			QueryRowAndClose(ctx, env.db)
-		assert.NoError(t, err, "Failed to execute a query: %v", err)
-		assert.Equal(t, "User 2", u.Name)
-		assert.EqualValues(t, 2, u.ID)
+		require.NoError(t, err, "Failed to execute a query: %v", err)
+		require.Equal(t, "User 2", u.Name)
+		require.EqualValues(t, 2, u.ID)
 	})
 }
 
@@ -161,9 +161,9 @@ func TestBindNested(t *testing.T) {
 			Bind(&u).
 			Where("id = ?", 2).
 			QueryRowAndClose(ctx, env.db)
-		assert.NoError(t, err, "Failed to execute a query: %v", err)
-		assert.Equal(t, "User 2", u.Name)
-		assert.EqualValues(t, 2, u.ID)
+		require.NoError(t, err, "Failed to execute a query: %v", err)
+		require.Equal(t, "User 2", u.Name)
+		require.EqualValues(t, 2, u.ID)
 	})
 }
 
@@ -180,18 +180,18 @@ func TestExec(t *testing.T) {
 
 		q.QueryRow(ctx, env.db)
 
-		assert.Equal(t, 3, count)
+		require.Equal(t, 3, count)
 
 		_, err := env.sqlf.DeleteFrom("users").
 			Where("id = ?", userId).
 			ExecAndClose(ctx, env.db)
-		assert.NoError(t, err, "Failed to delete a row. %s error: %v", env.driver, err)
+		require.NoError(t, err, "Failed to delete a row. %s error: %v", env.driver, err)
 
 		// Re-check the number of remaining rows
 		count = 0
 		q.QueryRow(ctx, env.db)
 
-		assert.Equal(t, 2, count)
+		require.Equal(t, 2, count)
 	})
 }
 
@@ -235,8 +235,8 @@ func TestPagination(t *testing.T) {
 		if err != nil {
 			return
 		}
-		assert.EqualValues(t, 4, result.Count)
-		assert.Len(t, result.Data, 2)
+		require.EqualValues(t, 4, result.Count)
+		require.Len(t, result.Data, 2)
 	})
 }
 
@@ -264,7 +264,7 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to execute a query: %v", err)
 		} else {
-			assert.Equal(t, 4, nRows)
+			require.Equal(t, 4, nRows)
 
 			q.Limit(1)
 
@@ -275,10 +275,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to execute a query: %v", err)
 			} else {
-				assert.Equal(t, 1, nRows)
-				assert.Equal(t, "User 3", userTo)
-				assert.Equal(t, "User 1", userFrom)
-				assert.Equal(t, 500.0, amount)
+				require.Equal(t, 1, nRows)
+				require.Equal(t, "User 3", userTo)
+				require.Equal(t, "User 1", userFrom)
+				require.Equal(t, 500.0, amount)
 			}
 		}
 	})
@@ -301,9 +301,9 @@ func TestQueryAndClose(t *testing.T) {
 				total += amount
 			})
 
-		assert.NoError(t, err, "Failed to execute a query. %s error: %v", env.driver, err)
-		assert.Equal(t, 4, nRows)
-		assert.Equal(t, 1550.0, total)
+		require.NoError(t, err, "Failed to execute a query. %s error: %v", env.driver, err)
+		require.Equal(t, 4, nRows)
+		require.Equal(t, 1550.0, total)
 	})
 }
 

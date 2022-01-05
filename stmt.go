@@ -145,11 +145,11 @@ For other SQL statements use New:
 	}
 */
 type Stmt struct {
-	dialect Dialect
+	dialect *Dialect
 	pos     int
 	chunks  stmtChunks
 	buf     *bytebufferpool.ByteBuffer
-	sql     *bytebufferpool.ByteBuffer
+	sql     string
 	args    []interface{}
 	dest    []interface{}
 }
@@ -544,28 +544,36 @@ func (q *Stmt) Clause(expr string, args ...interface{}) *Stmt {
 
 // String method builds and returns an SQL statement.
 func (q *Stmt) String() string {
-	if q.sql == nil {
-		var argNo int = 1
-		// Build a query
-		buf := getBuffer()
-		q.sql = buf
+	if q.sql == "" {
+		// Calculate the buffer hash and check for available queries
+		sql, ok := q.dialect.getCachedSQL(q.buf)
+		if ok {
+			q.sql = sql
+		} else {
+			// Build a query
+			var argNo int = 1
+			buf := strings.Builder{}
 
-		pos := 0
-		for n, chunk := range q.chunks {
-			// Separate clauses with spaces
-			if n > 0 && chunk.pos > pos {
-				buf.Write(space)
+			pos := 0
+			for n, chunk := range q.chunks {
+				// Separate clauses with spaces
+				if n > 0 && chunk.pos > pos {
+					buf.Write(space)
+				}
+				s := q.buf.B[chunk.bufLow:chunk.bufHigh]
+				if chunk.argLen > 0 && q.dialect == PostgreSQL {
+					argNo, _ = writePg(argNo, s, &buf)
+				} else {
+					buf.Write(s)
+				}
+				pos = chunk.pos
 			}
-			s := q.buf.B[chunk.bufLow:chunk.bufHigh]
-			if chunk.argLen > 0 && q.dialect == PostgreSQL {
-				argNo, _ = writePg(argNo, s, buf)
-			} else {
-				buf.Write(s)
-			}
-			pos = chunk.pos
+			q.sql = buf.String()
+			// Save it for reuse
+			q.dialect.putCachedSQL(q.buf, q.sql)
 		}
 	}
-	return bufToString(&q.sql.B)
+	return q.sql
 }
 
 /*
@@ -604,9 +612,8 @@ Invalidate forces a rebuild on next query execution.
 Most likely you don't need to call this method directly.
 */
 func (q *Stmt) Invalidate() {
-	if q.sql != nil {
-		putBuffer(q.sql)
-		q.sql = nil
+	if q.sql != "" {
+		q.sql = ""
 	}
 }
 
@@ -632,10 +639,7 @@ func (q *Stmt) Clone() *Stmt {
 	stmt.args = insertAt(stmt.args, q.args, 0)
 	stmt.dest = insertAt(stmt.dest, q.dest, 0)
 	stmt.buf.Write(q.buf.B)
-	if q.sql != nil {
-		stmt.sql = getBuffer()
-		stmt.sql.Write(q.sql.B)
-	}
+	stmt.sql = q.sql
 
 	return stmt
 }
