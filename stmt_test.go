@@ -133,6 +133,22 @@ func TestManyClauses(t *testing.T) {
 	assert.Equal(t, []interface{}{2, 5, 10}, args)
 }
 
+func TestWith(t *testing.T) {
+	var row struct {
+		ID       int64 `db:"id"`
+		Quantity int64 `db:"quantity"`
+	}
+	q := sqlf.With("t",
+		sqlf.From("orders").
+			Select("id, quantity").
+			Where("ts < ?", time.Now())).
+		From("t").
+		Bind(&row)
+	defer q.Close()
+
+	assert.Equal(t, "WITH t AS (SELECT id, quantity FROM orders WHERE ts < ?) SELECT id, quantity FROM t", q.String())
+}
+
 func TestWithRecursive(t *testing.T) {
 	q := sqlf.From("orders").
 		With("RECURSIVE regional_sales", sqlf.From("orders").Select("region, SUM(amount) AS total_sales").GroupBy("region")).

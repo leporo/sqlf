@@ -61,6 +61,15 @@ func (b Dialect) New(verb string, args ...interface{}) *Stmt {
 }
 
 /*
+With starts a statement prepended by WITH clause
+and closes a subquery passed as an argument.
+*/
+func (b Dialect) With(queryName string, query *Stmt) *Stmt {
+	q := getStmt(b)
+	return q.With(queryName, query)
+}
+
+/*
 From starts a SELECT statement.
 */
 func (b Dialect) From(expr string, args ...interface{}) *Stmt {

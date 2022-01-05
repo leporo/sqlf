@@ -47,6 +47,14 @@ func From(expr string, args ...interface{}) *Stmt {
 }
 
 /*
+With starts a statement prepended by WITH clause
+and closes a subquery passed as an argument.
+*/
+func With(queryName string, query *Stmt) *Stmt {
+	return defaultDialect.With(queryName, query)
+}
+
+/*
 Select starts a SELECT statement.
 
 	var cnt int64
