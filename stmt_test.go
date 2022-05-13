@@ -293,3 +293,26 @@ func TestBindStruct(t *testing.T) {
 	require.Equal(t, []interface{}{2}, q.Args())
 	require.EqualValues(t, []interface{}{&u.ID, &u.Date, &u.ChildTime, &u.Name}, q.Dest())
 }
+
+func TestRightHandUpdate(t *testing.T) {
+	sqlf := sqlf.PostgreSQL
+
+	exp := "UPDATE lists SET arr=arr || $1"
+	q := sqlf.Update("lists").
+		Set("arr = arr || ?", 42)
+	require.Equal(t, exp, q.String())
+	require.Equal(t, []interface{}{42}, q.Args())
+}
+
+func TestRightHandInsert(t *testing.T) {
+	sqlf := sqlf.PostgreSQL
+
+	exp := "INSERT INTO g ( a, b ) VALUES ( $1, ST_Distance($2, $3) )"
+	q := sqlf.
+		InsertInto("g").
+		Set("a", 42).
+		Set("b = ST_Distance(?, ?)", "{geom1}", "{geom2}")
+
+	require.Equal(t, exp, q.String())
+	require.Equal(t, []interface{}{42, "{geom1}", "{geom2}"}, q.Args())
+}

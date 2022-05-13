@@ -1,6 +1,7 @@
 package sqlf
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -289,8 +290,17 @@ Use generic Clause and Expr methods instead:
 
 	q.Clause("ON CONFLICT DO UPDATE SET").Expr("column_name = ?", value)
 */
-func (q *Stmt) Set(field string, value interface{}) *Stmt {
-	return q.SetExpr(field, "?", value)
+func (q *Stmt) Set(field string, args ...interface{}) *Stmt {
+	if strings.Contains(field, "=") {
+		clause := strings.Split(field, "=")
+		if len(clause) < 2 {
+			panic(fmt.Sprintf(`sqlf: invalid clause "%s"`, field))
+		}
+		field, expr := trim(clause[0]), trim(clause[1])
+		return q.SetExpr(field, expr, args...)
+	}
+
+	return q.SetExpr(field, "?", args...)
 }
 
 /*
@@ -781,6 +791,10 @@ loop:
 	q.Invalidate()
 
 	return index
+}
+
+func trim(clause string) string {
+	return strings.Trim(clause, " \t\n")
 }
 
 var (
