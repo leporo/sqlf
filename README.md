@@ -316,7 +316,7 @@ Use `Union` method to combine results of two queries:
 ```go
 var userId int64
 
-err := sqlf.InsertInto("users").
+_, err := sqlf.InsertInto("users").
     Set("email", "new@email.com").
     Set("address", "320 Some Avenue, Somewhereville, GA, US").
     Returning("id").To(&userId).
