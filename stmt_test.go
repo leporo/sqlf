@@ -293,3 +293,15 @@ func TestBindStruct(t *testing.T) {
 	require.Equal(t, []interface{}{2}, q.Args())
 	require.EqualValues(t, []interface{}{&u.ID, &u.Date, &u.ChildTime, &u.Name}, q.Dest())
 }
+
+func TestBulkInsert(t *testing.T) {
+	q := sqlf.InsertInto("vars")
+	defer q.Close()
+	for i := 1; i <= 5; i++ {
+		q.NewRow().
+			Set("no", i).
+			Set("val", i)
+	}
+	require.Equal(t, "INSERT INTO vars ( no, val ) VALUES ( ?, ? ), ( ?, ? ), ( ?, ? ), ( ?, ? ), ( ?, ? )", q.String())
+	require.Len(t, q.Args(), 10)
+}

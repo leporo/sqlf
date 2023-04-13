@@ -95,7 +95,7 @@ InsertInto starts an INSERT statement.
 	err := sqlf.InsertInto("table").
 		Set("field", value).
 		Returning("id").To(&newId).
-		ExecAndClose(ctx, db)
+		QueryRowAndClose(ctx, db)
 	if err != nil {
 		panic(err)
 	}
@@ -114,7 +114,7 @@ func DeleteFrom(tableName string) *Stmt {
 }
 
 type stmtChunk struct {
-	pos     int
+	pos     chunkPos
 	bufLow  int
 	bufHigh int
 	hasExpr bool
@@ -146,12 +146,18 @@ For other SQL statements use New:
 */
 type Stmt struct {
 	dialect *Dialect
-	pos     int
+	pos     chunkPos
 	chunks  stmtChunks
 	buf     *bytebufferpool.ByteBuffer
 	sql     string
 	args    []interface{}
 	dest    []interface{}
+}
+
+type newRow struct {
+	*Stmt
+	first    bool
+	notEmpty bool
 }
 
 /*
@@ -300,7 +306,7 @@ SetExpr is an extended version of Set method.
 	q.SetExpr("field", "? + ?", 31, 11)
 */
 func (q *Stmt) SetExpr(field, expr string, args ...interface{}) *Stmt {
-	p := 0
+	p := chunkPos(0)
 	for _, chunk := range q.chunks {
 		if chunk.pos == posInsert || chunk.pos == posUpdate {
 			p = chunk.pos
@@ -331,7 +337,6 @@ Where adds a filter:
 		Select("id, name").
 		Where("email = ?", email).
 		Where("is_active = 1")
-
 */
 func (q *Stmt) Where(expr string, args ...interface{}) *Stmt {
 	q.addChunk(posWhere, "WHERE", expr, args, " AND ")
@@ -554,7 +559,7 @@ func (q *Stmt) String() string {
 			var argNo int = 1
 			buf := strings.Builder{}
 
-			pos := 0
+			pos := chunkPos(0)
 			for n, chunk := range q.chunks {
 				// Separate clauses with spaces
 				if n > 0 && chunk.pos > pos {
@@ -686,7 +691,7 @@ func (q *Stmt) join(joinType, table, on string) (index int) {
 }
 
 // addChunk adds a clause or expression to a statement.
-func (q *Stmt) addChunk(pos int, clause, expr string, args []interface{}, sep string) (index int) {
+func (q *Stmt) addChunk(pos chunkPos, clause, expr string, args []interface{}, sep string) (index int) {
 	// Remember the position
 	q.pos = pos
 
@@ -783,6 +788,97 @@ loop:
 	return index
 }
 
+/*
+NewRow method helps to construct a bulk INSERT statement.
+
+The following code
+
+		q := stmt.InsertInto("table")
+	    for k, v := range entries {
+			q.NewRow().
+				Set("key", k).
+				Set("value", v)
+		}
+
+produces (assuming there were 2 key/value pairs at entries map):
+
+	INSERT INTO table ( key, value ) VALUES ( ?, ? ), ( ?, ? )
+*/
+func (q *Stmt) NewRow() newRow {
+	first := true
+	// Check if there are values
+loop:
+	for i := len(q.chunks) - 1; i >= 0; i-- {
+		chunk := q.chunks[i]
+		switch {
+		// See if an existing chunk can be extended
+		case chunk.pos == posValues:
+			// Values section is there, prepend
+			first = false
+			break loop
+		case chunk.pos < posValues:
+			break loop
+		}
+	}
+	if !first {
+		q.addChunk(posValues, "", " ", nil, " ), (")
+	}
+	return newRow{
+		Stmt:  q,
+		first: first,
+	}
+}
+
+/*
+Set method:
+
+- Adds a column to the list of columns and a value to VALUES clause of INSERT statement,
+
+A call to Set method generates both the list of columns and
+values to be inserted by INSERT statement:
+
+	q := sqlf.InsertInto("table").Set("field", 42)
+
+produces
+
+	INSERT INTO table (field) VALUES (42)
+
+Do not use it to construct ON CONFLICT DO UPDATE SET or similar clauses.
+Use generic Clause and Expr methods instead:
+
+	q.Clause("ON CONFLICT DO UPDATE SET").Expr("column_name = ?", value)
+*/
+func (row newRow) Set(field string, value interface{}) newRow {
+	return row.SetExpr(field, "?", value)
+}
+
+/*
+SetExpr is an extended version of Set method.
+
+	q.SetExpr("field", "field + 1")
+	q.SetExpr("field", "? + ?", 31, 11)
+*/
+func (row newRow) SetExpr(field, expr string, args ...interface{}) newRow {
+	q := row.Stmt
+
+	if row.first {
+		q.addChunk(posInsertFields, "", field, nil, ", ")
+		q.addChunk(posValues, "", expr, args, ", ")
+	} else {
+		sep := ""
+		if row.notEmpty {
+			sep = ", "
+		}
+		q.addChunk(posValues, "", expr, args, sep)
+	}
+
+	return newRow{
+		Stmt:     row.Stmt,
+		first:    row.first,
+		notEmpty: true,
+	}
+}
+
 var (
 	space            = []byte{' '}
 	placeholder      = []byte{'?'}
@@ -790,9 +886,11 @@ var (
 	joinOn           = []byte{' ', 'O', 'N', ' ', '('}
 )
 
+type chunkPos int
+
 const (
-	_        = iota
-	posStart = 100 * iota
+	_        chunkPos = iota
+	posStart chunkPos = 100 * iota
 	posWith
 	posInsert
 	posInsertFields

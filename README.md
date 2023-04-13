@@ -321,7 +321,7 @@ err := sqlf.InsertInto("users").
     Set("address", "320 Some Avenue, Somewhereville, GA, US").
     Returning("id").To(&userId).
     Clause("ON CONFLICT (email) DO UPDATE SET address = users.address").
-    ExecAndClose(ctx, db)
+    QueryRowAndClose(ctx, db)
 ```
 
 The same statement execution using the `database/sql` standard library looks like this:
@@ -339,10 +339,25 @@ In real-world cases there are tens of fields. On any update both the list of fie
 
 The use of `Set` method to maintain a field-value map is a way to solve this issue.
 
+#### Bulk Insert
+
+To insert a multiple rows via a single query, use `NewRow` method:
+
+```
+_, err := sqlf.InsertInto("users").
+    NewRow().
+        Set("email", "first@email.com").
+        Set("address", "320 Some Avenue, Somewhereville, GA, US").
+    NewRow().
+        Set("email", "second@email.com").
+        Set("address", "320 Some Avenue, Somewhereville, GA, US").
+    ExecAndClose(ctx, db)
+```
+
 ### UPDATE
 
 ```go
-err := sqlf.Update("users").
+_, err := sqlf.Update("users").
     Set("email", "new@email.com").
     ExecAndClose(ctx, db)
 ```
@@ -350,7 +365,7 @@ err := sqlf.Update("users").
 ### DELETE
 
 ```go
-err := sqlf.DeleteFrom("products").
+_, err := sqlf.DeleteFrom("products").
     Where("id = ?", 42)
     ExecAndClose(ctx, db)
 ```

@@ -14,18 +14,18 @@ import (
 // No SQL fragments will be altered.
 // PostgreSQL mode can be set for a statement:
 //
-//     q := sqlf.PostgreSQL.From("table").Select("field")
-//     ...
-//     q.Close()
+//	q := sqlf.PostgreSQL.From("table").Select("field")
+//		...
+//	q.Close()
 //
 // or as default mode:
 //
-//     sqlf.SetDialect(sqlf.PostgreSQL)
-//	   ...
-//     q := sqlf.From("table").Select("field")
-//     q.Close()
+//	    sqlf.SetDialect(sqlf.PostgreSQL)
+//		   ...
+//	    q := sqlf.From("table").Select("field")
+//	    q.Close()
 //
-// Wher PostgreSQL mode is activated, ? placeholders are
+// When PostgreSQL mode is activated, ? placeholders are
 // replaced with numbered positional arguments like $1, $2...
 type Dialect struct {
 	cacheOnce sync.Once
