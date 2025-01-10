@@ -1,0 +1,30 @@
+---
+name: Lint
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      # Run vet & lint on the code
+      - name: Run vet & lint
+        run: |
+          go mod tidy
+          go mod verify
+          go fix ./...
+          go vet -all ./...
+
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
