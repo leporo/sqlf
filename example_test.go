@@ -22,8 +22,10 @@ func (db *dummyDB) QueryRowContext(ctx context.Context, query string, args ...in
 	return nil
 }
 
-var db = new(dummyDB)
-var ctx = context.Background()
+var (
+	db  = new(dummyDB)
+	ctx = context.Background()
+)
 
 func Example() {
 	var (
@@ -223,7 +225,7 @@ func ExampleStmt_From() {
 	fmt.Println(q.String())
 	q.Close()
 	// Output:
-	//SELECT * FROM (SELECT id, section, header, score, row_number() OVER (PARTITION BY section ORDER BY score DESC) AS rating_in_section FROM news ORDER BY section, rating_in_section) counted_news WHERE rating_in_section <= 5
+	// SELECT * FROM (SELECT id, section, header, score, row_number() OVER (PARTITION BY section ORDER BY score DESC) AS rating_in_section FROM news ORDER BY section, rating_in_section) counted_news WHERE rating_in_section <= 5
 }
 
 func ExampleStmt_SubQuery() {
