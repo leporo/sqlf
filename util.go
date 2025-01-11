@@ -1,6 +1,7 @@
 package sqlf
 
 import (
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -24,4 +25,12 @@ func insertAt(dest, src []interface{}, index int) []interface{} {
 // the ByteBuffer is deallocated or returned to a pool.
 func bufToString(buf *[]byte) string {
 	return *(*string)(unsafe.Pointer(buf))
+}
+
+func newAtomicPointer[T any](initialValue *T) *atomic.Pointer[T] {
+	var pointer atomic.Pointer[T]
+
+	pointer.Store(initialValue)
+
+	return &pointer
 }
