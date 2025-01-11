@@ -4,8 +4,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 )
 
 // Dialect defines the method SQL statement is to be built.
@@ -40,7 +38,7 @@ var (
 	PostgreSQL *Dialect = &Dialect{}
 )
 
-var defaultDialect = NoDialect
+var defaultDialectPointer = newAtomicPointer(NoDialect)
 
 /*
 SetDialect selects a Dialect to be used by default.
@@ -50,7 +48,7 @@ Dialect can be one of sqlf.NoDialect or sqlf.PostgreSQL
 	sqlf.SetDialect(sqlf.PostgreSQL)
 */
 func SetDialect(newDefaultDialect *Dialect) {
-	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&defaultDialect)), unsafe.Pointer(newDefaultDialect))
+	defaultDialectPointer.Store(newDefaultDialect)
 }
 
 /*

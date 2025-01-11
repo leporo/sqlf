@@ -26,7 +26,7 @@ Use New for special cases like this:
 	}
 */
 func New(verb string, args ...interface{}) *Stmt {
-	return defaultDialect.New(verb, args...)
+	return defaultDialectPointer.Load().New(verb, args...)
 }
 
 /*
@@ -43,7 +43,7 @@ From starts a SELECT statement.
 	}
 */
 func From(expr string, args ...interface{}) *Stmt {
-	return defaultDialect.From(expr, args...)
+	return defaultDialectPointer.Load().From(expr, args...)
 }
 
 /*
@@ -51,7 +51,7 @@ With starts a statement prepended by WITH clause
 and closes a subquery passed as an argument.
 */
 func With(queryName string, query *Stmt) *Stmt {
-	return defaultDialect.With(queryName, query)
+	return defaultDialectPointer.Load().With(queryName, query)
 }
 
 /*
@@ -70,7 +70,7 @@ Select starts a SELECT statement.
 Note that From method can also be used to start a SELECT statement.
 */
 func Select(expr string, args ...interface{}) *Stmt {
-	return defaultDialect.Select(expr, args...)
+	return defaultDialectPointer.Load().Select(expr, args...)
 }
 
 /*
@@ -85,7 +85,7 @@ Update starts an UPDATE statement.
 	}
 */
 func Update(tableName string) *Stmt {
-	return defaultDialect.Update(tableName)
+	return defaultDialectPointer.Load().Update(tableName)
 }
 
 /*
@@ -101,7 +101,7 @@ InsertInto starts an INSERT statement.
 	}
 */
 func InsertInto(tableName string) *Stmt {
-	return defaultDialect.InsertInto(tableName)
+	return defaultDialectPointer.Load().InsertInto(tableName)
 }
 
 /*
@@ -110,7 +110,7 @@ DeleteFrom starts a DELETE statement.
 	err := sqlf.DeleteFrom("table").Where("id = ?", id).ExecAndClose(ctx, db)
 */
 func DeleteFrom(tableName string) *Stmt {
-	return defaultDialect.DeleteFrom(tableName)
+	return defaultDialectPointer.Load().DeleteFrom(tableName)
 }
 
 type stmtChunk struct {
