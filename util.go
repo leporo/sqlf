@@ -1,7 +1,7 @@
 package sqlf
 
 import (
-	"unsafe"
+	"github.com/savsgio/gotils/strconv"
 )
 
 func insertAt(dest, src []interface{}, index int) []interface{} {
@@ -23,5 +23,5 @@ func insertAt(dest, src []interface{}, index int) []interface{} {
 // Use the returned string with care, make sure to never use it after
 // the ByteBuffer is deallocated or returned to a pool.
 func bufToString(buf *[]byte) string {
-	return *(*string)(unsafe.Pointer(buf))
+	return strconv.B2S(*buf)
 }
