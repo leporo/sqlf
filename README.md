@@ -1,7 +1,7 @@
 # sqlf
 
 [![GoDoc Reference](https://godoc.org/github.com/leporo/sqlf?status.svg)](http://godoc.org/github.com/leporo/sqlf)
-![Build Status](https://github.com/leporo/sqlf/actions/workflows/build.yml/badge.svg)
+![Build Status](https://github.com/leporo/sqlf/actions/workflows/go.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/leporo/sqlf)](https://goreportcard.com/report/github.com/leporo/sqlf)
 [![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go#sql-query-builders)
 
