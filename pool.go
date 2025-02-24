@@ -6,9 +6,7 @@ import (
 	"github.com/valyala/bytebufferpool"
 )
 
-var (
-	stmtPool = sync.Pool{New: newStmt}
-)
+var stmtPool = sync.Pool{New: newStmt}
 
 func newStmt() interface{} {
 	return &Stmt{
